@@ -85,7 +85,6 @@ function load() {
         player.equipedWeapon = slot - 1;
       }
     }
-    // console.log(Weapons)
     if (e.key.toLowerCase() === "q") {
       console.log(player.equipedWeapon)
       player.equipedWeapon = mod((player.equipedWeapon - 1), Object.entries(Weapons).length);
