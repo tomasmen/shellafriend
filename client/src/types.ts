@@ -1,11 +1,17 @@
 import type { Player, Vec2 } from './classes.ts';
 
-export type WeaponId = "rpg" | "shotgun" | "sniper";
+export type Camera = {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+export type WeaponId = "rpg" | "shotgun" | "sniper" | "morgan" | "nick";
 
 export type WeaponDef = {
   id: WeaponId;
   name: string;
-  kind: "projectile" | "hitscan" | "melee";
+  kind: "projectile" | "hitscan" | "melee" | "placeable";
   shots: number;
   endsRound: boolean;
   canUse(player: Player): boolean;
@@ -21,6 +27,7 @@ export type Hitmark = {
 }
 
 export type Terrain = {
+  waterLevel: number;
   loaded: boolean,
   bitmap: Uint8Array | null,
   imageData: ImageData | null,
@@ -36,6 +43,9 @@ export type PressedKeys = {
 export type MovementResult = {
   movement: Vec2;
   stepUp: number;
+  hitGround: boolean;
+  hitWall: boolean;
+  hitRoof: boolean;
 }
 
 export type AABB = {

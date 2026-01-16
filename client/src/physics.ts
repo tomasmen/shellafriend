@@ -1,7 +1,6 @@
 import type { AABB, MovementResult } from "./types"
-import { Vec2, Avatar } from "./classes";
+import { Vec2, Avatar, Entity } from "./classes";
 import { terrain } from "./main";
-import { MAX_STEP_HEIGHT } from "./constants.ts"
 
 export function isSolidPixel(x: number, y: number): boolean {
   if (!terrain.loaded || !terrain.bitmap) return false;
@@ -17,7 +16,7 @@ export function isSolidPixel(x: number, y: number): boolean {
   return terrain.bitmap[yi * terrain.image.naturalWidth + xi] === 1;
 }
 
-function overlapsSolid(hitbox: AABB): boolean {
+function overlapsTerrain(hitbox: AABB): boolean {
   const left = Math.floor(hitbox.x);
   const right = Math.floor(hitbox.x + hitbox.width - 1);
   const top = Math.floor(hitbox.y);
@@ -29,6 +28,30 @@ function overlapsSolid(hitbox: AABB): boolean {
     }
   }
   return false;
+}
+
+export function hitboxesOverlap(a: AABB, b: AABB): boolean {
+  const aLeft = a.x;
+  const aRight = a.x + a.width;
+  const aTop = a.y;
+  const aBottom = a.y + a.height;
+
+  const bLeft = b.x;
+  const bRight = b.x + b.width;
+  const bTop = b.y;
+  const bBottom = b.y + b.height;
+
+  // If they are separated OR just touching, not overlapping
+  if (aRight <= bLeft) return false;
+  if (bRight <= aLeft) return false;
+  if (aBottom <= bTop) return false;
+  if (bBottom <= aTop) return false;
+
+  return true;
+}
+
+function overlapsAny(a: AABB, candidates: AABB[]): boolean {
+  return candidates.some((c) => hitboxesOverlap(a, c));
 }
 
 function isBlockedAtHeight(avatar: Avatar, dx: number, yOffset: number): boolean {
@@ -61,20 +84,20 @@ export function isWallCollision(avatar: Avatar, dx: number): boolean {
   return false; // Only blocked at feet = slope
 }
 
-export function clampMovement(avatar: Avatar, movement: Vec2): MovementResult {
-  if (!terrain.loaded) return { movement, stepUp: 0 };
+export function clampMovement(entity: Entity, movement: Vec2, stepHeight: number = 0, collisionGroup: AABB[]): MovementResult {
+  if (!terrain.loaded) return { movement, stepUp: 0, hitGround: false, hitWall: false, hitRoof: false };
 
-  const baseX = avatar.worldPosFloat.x;
-  const baseY = avatar.worldPosFloat.y;
+  const baseX = entity.worldPosFloat.x;
+  const baseY = entity.worldPosFloat.y;
 
   const overlapsAt = (x: number, y: number) => {
     const hb: AABB = {
       x,
       y,
-      width: avatar.hitbox.width,
-      height: avatar.hitbox.height,
+      width: entity.hitbox.width,
+      height: entity.hitbox.height,
     };
-    return overlapsSolid(hb);
+    return overlapsTerrain(hb) || overlapsAny(hb, collisionGroup);
   };
 
   // Resolve x and y in order.
@@ -89,8 +112,8 @@ export function clampMovement(avatar: Avatar, movement: Vec2): MovementResult {
     if (overlapsAt(baseX + dx, baseY)) {
       let found = false;
       // Can we step over this boundary?
-      if (avatar.grounded) {
-        for (let step = 1; step <= MAX_STEP_HEIGHT; step++) {
+      if (stepHeight > 0) {
+        for (let step = 1; step <= stepHeight; step++) {
           if (!overlapsAt(targetX, baseY - step)) {
             stepUp = step;
             found = true;
@@ -147,5 +170,8 @@ export function clampMovement(avatar: Avatar, movement: Vec2): MovementResult {
     }
   }
 
-  return { movement: new Vec2(dx, dy), stepUp: stepUp };
+  const hitGround = movement.y > 0 && dy < movement.y;
+  const hitRoof = movement.y < 0 && dy > movement.y;
+  const hitWall = (movement.x != dx)
+  return { movement: new Vec2(dx, dy), stepUp: stepUp, hitGround: hitGround, hitWall: hitWall, hitRoof: hitRoof };
 }

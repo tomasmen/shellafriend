@@ -1,7 +1,7 @@
 
 // KNOBS
 export const GRAVITY = 300;
-export const MOVE_ACCEL = 100;
+export const MOVE_ACCEL = 300;
 export const AIR_ACCEL = 50;
 export const MAX_SPEED_X_AIR = 120;
 export const MAX_SPEED_X_GROUND = 50;

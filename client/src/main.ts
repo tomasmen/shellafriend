@@ -1,8 +1,9 @@
 import './index.css'
 import { clampMovement, isWallCollision } from "./physics";
-import { Player, Vec2 } from './classes';
-import type { Terrain, Hitmark } from "./types"
+import { Avatar, Entity, Player, Projectile, Vec2 } from './classes';
+import type { Terrain, Hitmark, Camera, AABB } from "./types"
 import { Weapons } from './weapons';
+import { clampAbs, approachZero, mod } from "./utils";
 import {
   GRAVITY,
   MOVE_ACCEL,
@@ -10,12 +11,20 @@ import {
   MAX_SPEED_X_AIR,
   MAX_SPEED_X_GROUND,
   FRICTION_GROUND,
-  INTENTIONAL_FRICTION_GROUND_MULT,
+  INTENTIONAL_FRICTION_GROUND_MULT as REVERSING_GROUND_FRICT_MULTI,
   JUMP_IMPULSE_VEL_Y,
   JUMP_MIN_TAKEOFF_VEL_X,
   SLOPE_SLOW,
-  JUMP_COOLDOWN_MS,
+  MAX_STEP_HEIGHT,
 } from './constants.ts';
+import {
+  clearCanvas,
+  drawAvatars,
+  drawTerrain,
+  drawWeaponUI,
+  startCanvasDrawing,
+  startWorldDrawing
+} from './draw.ts';
 
 const solidBrightnessThreshold = 10;
 const wrapper = document.querySelector("#wrapper");
@@ -26,31 +35,28 @@ wrapper?.appendChild(canvas);
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-function clearCanvas(color: string) {
-  drawingContext.fillStyle = color;
-  drawingContext.fillRect(0, 0, canvas.width, canvas.height);
-}
-
-function mod(n: number, m: number) {
-  return ((n % m) + m) % m;
-}
-
-export let player: Player;
-export let terrain: Terrain;
+export let localPlayer: Player;
+export const remotePlayers: Player[] = [];
+export const camera: Camera = { x: 0, y: 0, zoom: 2.5 }
+export const terrain: Terrain = { waterLevel: 20, loaded: false, bitmap: null, imageData: null, image: new Image() };
 export const hitmarks: Hitmark[] = [];
 export const hitmarksToDelete: number[] = [];
+export const projectiles: Projectile[] = [];
 
 function load() {
-  terrain = { loaded: false, bitmap: null, imageData: null, image: new Image() }
-  terrain.image.src = "/maps/testmap1.jpg";
+  terrain.image.src = "/maps/testmap1.png";
 
   terrain.image.onload = () => {
     const w = terrain.image.naturalWidth;
     const h = terrain.image.naturalHeight;
 
-    const offscreenCanvas = new OffscreenCanvas(900, 300);
-    offscreenCanvas.width = w;
-    offscreenCanvas.height = h;
+    const viewW = canvas.width / camera.zoom;
+    const viewH = canvas.height / camera.zoom;
+
+    camera.x = w / 2 - viewW / 2;
+    camera.y = h / 2 - viewH / 2;
+
+    const offscreenCanvas = new OffscreenCanvas(w, h);
     const offCtx = offscreenCanvas.getContext("2d");
     if (!offCtx) throw new Error("No 2d context on offscreenCanvas");
 
@@ -61,10 +67,7 @@ function load() {
 
     for (let p = 0; p < w * h; p++) {
       const pixelIndex = p * 4;
-      const r = data[pixelIndex];
-      const g = data[pixelIndex + 1];
-      const b = data[pixelIndex + 2];
-      const brightness = (r + g + b) / 3;
+      const brightness = data[pixelIndex + 3];
       solidBitmap[p] = brightness > solidBrightnessThreshold ? 1 : 0;
     }
 
@@ -73,144 +76,132 @@ function load() {
     terrain.imageData = imgData;
   }
 
-  player = new Player("purple", 3);
+  localPlayer = new Player("purple", [new Vec2(50, 50)]);
+  remotePlayers.push(new Player("green", [new Vec2(80, 50)]));
+  remotePlayers.push(new Player("blue", [new Vec2(100, 50)]));
 
   window.onkeydown = (e) => {
-    if (e.key.toLowerCase() === "a") player.keys.a = true;
-    if (e.key.toLowerCase() === "d") player.keys.d = true;
-    if (e.key.toLowerCase() === " ") player.keys.space = true;
+    if (e.key.toLowerCase() === "a") localPlayer.keys.a = true;
+    if (e.key.toLowerCase() === "d") localPlayer.keys.d = true;
+    if (e.key.toLowerCase() === " ") localPlayer.keys.space = true;
     if (["1", "2", "3", "4", "5", "6", "7", "8", "9"].includes(e.key.toLowerCase())) {
       const slot = parseInt(e.key.toLowerCase());
       if (slot <= Object.entries(Weapons).length) {
-        player.equipedWeapon = slot - 1;
+        localPlayer.equipedWeapon = slot - 1;
       }
     }
     if (e.key.toLowerCase() === "q") {
-      console.log(player.equipedWeapon)
-      player.equipedWeapon = mod((player.equipedWeapon - 1), Object.entries(Weapons).length);
-      console.log(player.equipedWeapon)
+      localPlayer.equipedWeapon = mod((localPlayer.equipedWeapon - 1), Object.entries(Weapons).length);
     }
 
     if (e.key.toLowerCase() === "e") {
-      console.log(player.equipedWeapon)
-      player.equipedWeapon = mod((player.equipedWeapon + 1), Object.entries(Weapons).length);
-      console.log(player.equipedWeapon)
+      localPlayer.equipedWeapon = mod((localPlayer.equipedWeapon + 1), Object.entries(Weapons).length);
     }
   };
 
   window.onkeyup = (e) => {
-    if (e.key.toLowerCase() === "a") player.keys.a = false;
-    if (e.key.toLowerCase() === "d") player.keys.d = false;
-    if (e.key.toLowerCase() === " ") player.keys.space = false;
+    if (e.key.toLowerCase() === "a") localPlayer.keys.a = false;
+    if (e.key.toLowerCase() === "d") localPlayer.keys.d = false;
+    if (e.key.toLowerCase() === " ") localPlayer.keys.space = false;
   };
 }
 
-function clampAbs(v: number, maxAbs: number) {
-  return Math.max(-maxAbs, Math.min(maxAbs, v));
+function applyAvatarInput(avatar: Avatar, timeMS: number, deltaTime: number) {
+  const ax = (avatar.grounded ? MOVE_ACCEL : AIR_ACCEL) * localPlayer.inputX;
+  avatar.velocity.x += ax * deltaTime;
+
+  //-- Jump vel ?
+  if (localPlayer.keys.space && avatar.canJump(timeMS)) {
+    avatar.lastJumpTime = timeMS;
+    avatar.velocity.y = -JUMP_IMPULSE_VEL_Y;
+    if (localPlayer.inputX !== 0) {
+      const takeoffVx = localPlayer.inputX * JUMP_MIN_TAKEOFF_VEL_X;
+      if (Math.abs(avatar.velocity.x) < Math.abs(takeoffVx)) {
+        avatar.velocity.x = takeoffVx;
+      }
+    }
+    avatar.grounded = false;
+    localPlayer.keys.space = false;
+  }
+
 }
 
-function approachZero(v: number, amount: number) {
-  if (v > 0) return Math.max(0, v - amount);
-  if (v < 0) return Math.min(0, v + amount);
-  return 0;
+function applyGravity(entity: Entity, deltaTime: number) {
+  entity.velocity.y += GRAVITY * deltaTime;
 }
 
-function drawWeaponUI(x: number, y: number) {
-  let i = 0;
-  for (const [_, def] of Object.entries(Weapons)) {
-    drawingContext.fillStyle = "#00ffff99";
-    drawingContext.fillRect(x - 5, y - 13 + i * 20, 120, 20);
-    drawingContext.fillStyle = "red";
-    const displayName = player.equipedWeapon === i ? `[${i + 1}. ${def.name}]` : `${i + 1}. ${def.name}`;
-    drawingContext.fillText(displayName, x, y + i * 20);
-    i++;
+function applyGroundFriction(avatar: Avatar, deltaTime: number) {
+  if (!avatar.grounded) return;
+
+  let fric = FRICTION_GROUND * deltaTime;
+
+  if (avatar === localPlayer.activeAvatar && localPlayer.inputX !== 0) {
+    const reversing =
+      avatar.velocity.x !== 0 &&
+      Math.sign(avatar.velocity.x) !== Math.sign(localPlayer.inputX);
+
+    if (reversing) {
+      fric *= REVERSING_GROUND_FRICT_MULTI
+    }
+  }
+
+  avatar.velocity.x = approachZero(avatar.velocity.x, fric);
+}
+
+function applySlopeSlow(avatar: Avatar, moved: Vec2, stepUp: number) {
+  if (stepUp > 0 && Math.abs(moved.x) > 0.01) {
+    const slopeRatio = stepUp / Math.abs(moved.x);
+    const slopeFactor = Math.min(slopeRatio, 1);
+    const slowDown = 1 - slopeFactor * SLOPE_SLOW;
+    avatar.velocity.x *= slowDown;
   }
 }
 
-function update(timeMS: number, deltaTime: number) {
-  if (!terrain.loaded) return;
+function updateAllAvatars(timeMS: number, deltaTime: number) {
+  const remoteAvatars = remotePlayers.flatMap((p) => p.avatars);
+  const allAvatars = remoteAvatars.concat(localPlayer.avatars);
 
-  let inputX = 0;
-  if (player.keys.a) inputX -= 1;
-  if (player.keys.d) inputX += 1;
-
-  for (let avatar of player.avatars) {
-    // Clamp dt to avoid huge physics steps on tab switch / lag spikes
-    const dt = Math.min(deltaTime, 1 / 30);
-
-    avatar.velocity.y += GRAVITY * dt;
-
-    if (avatar === player.activeAvatar) {
-      const ax = (avatar.grounded ? MOVE_ACCEL : AIR_ACCEL) * inputX;
-      avatar.velocity.x += ax * dt;
+  for (let avatar of allAvatars) {
+    if (avatar === localPlayer.activeAvatar) {
+      applyAvatarInput(avatar, timeMS, deltaTime);
     }
 
+    applyGravity(avatar, deltaTime);
+
+    applyGroundFriction(avatar, deltaTime)
+
+    // COMMON ? terminal velocity
     avatar.velocity.x = clampAbs(
       avatar.velocity.x,
       avatar.grounded ? MAX_SPEED_X_GROUND : MAX_SPEED_X_AIR
     );
 
-    if (avatar.grounded) {
-      if (inputX === 0) {
-        // Normal ground friction
-        avatar.velocity.x = approachZero(avatar.velocity.x, FRICTION_GROUND * dt);
-      } else if (avatar === player.activeAvatar) {
-        const reversing =
-          avatar.velocity.x !== 0 &&
-          Math.sign(avatar.velocity.x) !== Math.sign(inputX);
-
-        if (reversing) {
-          // intentional braking when holding opposite direction
-          avatar.velocity.x = approachZero(
-            avatar.velocity.x,
-            INTENTIONAL_FRICTION_GROUND_MULT * FRICTION_GROUND * dt
-          );
-        }
-      }
-    }
-
-    if (avatar === player.activeAvatar && avatar.grounded && player.keys.space && (timeMS - avatar.lastJumpTime) > JUMP_COOLDOWN_MS) {
-      avatar.lastJumpTime = timeMS;
-      avatar.velocity.y = -JUMP_IMPULSE_VEL_Y;
-      if (inputX !== 0) {
-        const takeoffVx = inputX * JUMP_MIN_TAKEOFF_VEL_X;
-        if (Math.abs(avatar.velocity.x) < Math.abs(takeoffVx)) {
-          avatar.velocity.x = takeoffVx;
-        }
-      }
-      avatar.grounded = false;
-      player.keys.space = false;
-    }
 
     const intended: Vec2 = new Vec2(
-      avatar.velocity.x * dt,
-      avatar.velocity.y * dt,
+      avatar.velocity.x * deltaTime,
+      avatar.velocity.y * deltaTime,
     );
 
-    const { movement: moved, stepUp } = clampMovement(avatar, intended);
+    const remoteHitboxes: AABB[] = remotePlayers.flatMap((rp) => rp.avatars).filter(ra => ra !== avatar).map(a => a.hitbox);
+    const localHitboxes: AABB[] = localPlayer.avatars.filter(a => a !== avatar).map(a => a.hitbox);
+    const allHitboxesExceptSelf = remoteHitboxes.concat(localHitboxes);
+    const { movement: moved, stepUp, hitGround, hitWall } = clampMovement(avatar, intended, avatar.grounded ? MAX_STEP_HEIGHT : 0, allHitboxesExceptSelf);
 
-    if (stepUp > 0 && Math.abs(moved.x) > 0.01) {
-      const slopeRatio = stepUp / Math.abs(moved.x);
-      const slopeFactor = Math.min(slopeRatio, 1);
-      const slowDown = 1 - slopeFactor * SLOPE_SLOW;
-      avatar.velocity.x *= slowDown;
-    }
+    applySlopeSlow(avatar, moved, stepUp)
 
     // Move the allowed distance before a collision
     avatar.move(moved.x, moved.y);
 
-    // STOP VEL depending on collision
     // TODO: (here can apply bounce and other stuff later)
-    if (moved.y !== intended.y) {
-      if (avatar.velocity.y > 0) {
-        avatar.grounded = true;
-      }
+
+    if (hitGround) {
+      avatar.grounded = true;
       avatar.velocity.y = 0;
     } else {
       avatar.grounded = false;
     }
 
-    if (moved.x !== intended.x) {
+    if (hitWall) {
       if (avatar.velocity.y >= 0 && isWallCollision(avatar, intended.x)) {
         avatar.velocity.x = 0;
       }
@@ -218,31 +209,36 @@ function update(timeMS: number, deltaTime: number) {
   }
 }
 
-function draw() {
-  // Clear
-  clearCanvas("black");
+function updateProjectiles(timeMS: number, deltaTime: number) {
+  for (const projectile of projectiles) {
 
-  // Draw Terrain
-  if (terrain) {
-    drawingContext.drawImage(terrain.image, 0, 0);
+
   }
+}
 
-  // Draw Player
-  player.avatars.forEach((avatar) => {
-    drawingContext.fillStyle = player.color;
-    drawingContext.fillRect(
-      avatar.worldPos.x,
-      avatar.worldPos.y,
-      avatar.hitbox.width,
-      avatar.hitbox.height
-    );
-  });
+function update(timeMS: number, deltaTime: number) {
+  if (!terrain.loaded) return;
 
-  drawWeaponUI(10, 100);
+  // Clamp to avoid huge change when changing tabs
+  deltaTime = Math.min(deltaTime, 1 / 30);
+
+  updateAllAvatars(timeMS, deltaTime);
+  updateProjectiles(timeMS, deltaTime);
+}
+
+function draw() {
+  clearCanvas(drawingContext, "black");
+
+  startWorldDrawing(drawingContext, camera)
+  drawTerrain(drawingContext, terrain);
+  drawAvatars(drawingContext, remotePlayers, localPlayer);
+  // drawProjectiles(drawingContext, projectiles);
+
+  startCanvasDrawing(drawingContext)
+  drawWeaponUI(drawingContext, 20, 20, localPlayer, Weapons);
 }
 
 let lastTickTimeMS = 0;
-
 function tick(timeMS: number) {
   if (lastTickTimeMS === 0) lastTickTimeMS = timeMS;
 
