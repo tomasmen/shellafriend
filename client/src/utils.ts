@@ -1,3 +1,6 @@
+import { Vec2 } from "./classes";
+import type { AABB, Camera } from "./types";
+
 export function mod(n: number, m: number) {
   return ((n % m) + m) % m;
 }
@@ -12,3 +15,23 @@ export function approachZero(v: number, amount: number) {
   return 0;
 }
 
+
+export function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+export function distanceToRect(point: Vec2, rect: AABB): number {
+  const closestX = clamp(point.x, rect.x, rect.x + rect.width);
+  const closestY = clamp(point.y, rect.y, rect.y + rect.height);
+
+  const dx = point.x - closestX;
+  const dy = point.y - closestY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+export function screenToWorld(screen: Vec2, camera: Camera): Vec2 {
+  return new Vec2(
+    camera.x + screen.x / camera.zoom,
+    camera.y + screen.y / camera.zoom
+  );
+}

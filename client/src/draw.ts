@@ -1,4 +1,5 @@
-import { Avatar, Player, Vec2 } from "./classes";
+import { Avatar, Gravestone, HitmarkCache, Player, Projectile, Vec2 } from "./classes";
+import { SHOW_DAMAGE_TIME_MS } from "./constants";
 import type { Camera, Terrain, WeaponDef, WeaponId } from "./types";
 
 export function clearCanvas(ctx: CanvasRenderingContext2D, color: string) {
@@ -10,7 +11,7 @@ export function drawPoly(ctx: CanvasRenderingContext2D, vertices: Vec2[], border
   if (vertices.length < 3) return;
 
   ctx.beginPath();
-  ctx.moveTo(vertices[0].x, vertices[1].y);
+  ctx.moveTo(Math.floor(vertices[0].x), Math.floor(vertices[0].y));
   for (let i = 1; i < vertices.length; i++) {
     ctx.lineTo(Math.floor(vertices[i].x), Math.floor(vertices[i].y));
   }
@@ -27,25 +28,32 @@ export function drawPoly(ctx: CanvasRenderingContext2D, vertices: Vec2[], border
   }
 }
 
-export function drawCircle(ctx: CanvasRenderingContext2D, pos: Vec2, radius: number, borderColor: string | null, fillColor: string | null, samples: number = 32) {
-  // Make sure we can actually make a polygon
-  samples = Math.max(3, samples);
+export function drawCircle(
+  ctx: CanvasRenderingContext2D,
+  pos: Vec2,
+  radius: number,
+  borderColor: string | null,
+  fillColor: string | null
+) {
+  if (radius <= 0) return;
 
-  const vertices: Vec2[] = [];
-  const radianStep = 2 * Math.PI / samples;
-  for (let i = 0; i < samples; i++) {
-    const theta = i * radianStep;
-    vertices.push(new Vec2(
-      pos.x + Math.cos(theta) * radius,
-      pos.y + Math.sin(theta) * radius,
-    ));
+  ctx.beginPath();
+  ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+
+  if (fillColor !== null) {
+    ctx.fillStyle = fillColor;
+    ctx.fill();
   }
 
-  drawPoly(ctx, vertices, borderColor, fillColor);
+  if (borderColor !== null) {
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = borderColor;
+    ctx.stroke();
+  }
 }
 
-export function drawAvatar(ctx: CanvasRenderingContext2D, avatar: Avatar, color: string) {
-  ctx.fillStyle = color;
+export function drawAvatar(ctx: CanvasRenderingContext2D, avatar: Avatar) {
+  ctx.fillStyle = avatar.owner.color;
   ctx.fillRect(
     avatar.worldPos.x,
     avatar.worldPos.y,
@@ -55,10 +63,11 @@ export function drawAvatar(ctx: CanvasRenderingContext2D, avatar: Avatar, color:
 }
 
 export function drawSelectedAvatarArrow(ctx: CanvasRenderingContext2D, avatar: Avatar, color: string) {
+  const arrowYDisplacement = 20;
   const vertices = [
-    new Vec2(avatar.worldPos.x + 2, avatar.worldPos.y - 15),
-    new Vec2(avatar.worldPos.x + avatar.width - 2, avatar.worldPos.y - 15),
-    new Vec2(avatar.worldPos.x + avatar.width / 2, avatar.worldPos.y - 10),
+    new Vec2(avatar.worldPos.x + 2, avatar.worldPos.y - arrowYDisplacement),
+    new Vec2(avatar.worldPos.x + avatar.width - 2, avatar.worldPos.y - arrowYDisplacement),
+    new Vec2(avatar.worldPos.x + avatar.width / 2, avatar.worldPos.y - arrowYDisplacement + 5),
   ]
   drawPoly(ctx, vertices, "#00ffff99", color);
 }
@@ -72,29 +81,104 @@ export function startCanvasDrawing(ctx: CanvasRenderingContext2D) {
 }
 
 export function drawTerrain(ctx: CanvasRenderingContext2D, terrain: Terrain) {
-  if (terrain) {
-    ctx.fillStyle = "#0044ffff";
-    ctx.fillRect(0, terrain.image.naturalHeight - terrain.waterLevel, terrain.image.naturalWidth, terrain.waterLevel);
-    const borderWidth = 5;
-    ctx.fillStyle = "#ffffff88";
-    ctx.fillRect(-borderWidth, -borderWidth, terrain.image.naturalWidth + borderWidth * 2, terrain.image.naturalHeight + borderWidth * 2);
-    ctx.drawImage(terrain.image, 0, 0);
+  if (!terrain.loaded) return;
+
+
+  ctx.drawImage(terrain.canvas!, 0, 0);
+}
+
+export function drawMapBorder(ctx: CanvasRenderingContext2D, terrain: Terrain) {
+  const borderWidth = 5;
+  ctx.fillStyle = "#ffffff88";
+  ctx.fillRect(-borderWidth, -borderWidth, terrain.image.naturalWidth + borderWidth * 2, terrain.image.naturalHeight + borderWidth * 2);
+}
+
+export function drawWaterLevel(ctx: CanvasRenderingContext2D, terrain: Terrain) {
+  ctx.fillStyle = "#0044ffff";
+  ctx.fillRect(0, terrain.image.naturalHeight - terrain.waterLevel, terrain.image.naturalWidth, terrain.waterLevel);
+}
+
+export function drawProjectiles(ctx: CanvasRenderingContext2D, projectiles: Projectile[]) {
+  for (const projetile of projectiles) {
+    drawCircle(ctx, projetile.worldPos, 0.1, "#ff0000ff", "#ff4444ff");
   }
 }
 
-export function drawAvatars(ctx: CanvasRenderingContext2D, remotePlayers: Player[], localPlayer: Player) {
-  remotePlayers.forEach((p) => {
-    p.avatars.forEach((avatar) => drawAvatar(ctx, avatar, p.color))
+export function drawHealthbar(ctx: CanvasRenderingContext2D, avatar: Avatar, timeMS: number) {
+  const barwidth = Math.round(avatar.width * 1.2);
+  const currentHpWidth = Math.max(0, avatar.healthPoints / avatar.maxHealthPoints * barwidth);
+  const damageBar = Math.max(0, avatar.healthPointsBeforeLastDamage / avatar.maxHealthPoints * barwidth);
+
+  const left = avatar.worldPos.x - 1;
+  const top = avatar.worldPos.y - 13;
+  const barHeight = 3;
+
+  ctx.fillStyle = "black";
+  ctx.fillRect(left, top, barwidth, barHeight);
+  if (avatar.lastDamageTime + SHOW_DAMAGE_TIME_MS > timeMS) {
+    ctx.fillStyle = "red";
+    ctx.fillRect(left, top, damageBar, barHeight);
+  }
+  ctx.fillStyle = "green";
+  ctx.fillRect(left, top, currentHpWidth, barHeight);
+}
+
+export function drawAvatarName(ctx: CanvasRenderingContext2D, avatar: Avatar) {
+  const fontSize = 5;
+  const fontFamily = "Arial";
+  ctx.font = `${fontSize}px ${fontFamily}`;
+  ctx.textBaseline = "top";
+
+  const name = avatar.name;
+  const namesize = ctx.measureText(name);
+
+  const left = avatar.worldPos.x + avatar.width / 2 - namesize.width / 2;
+  const top = avatar.worldPos.y - 7;
+
+
+  ctx.fillStyle = avatar.owner.color;
+  ctx.fillText(name, left, top);
+}
+
+export function drawAvatars(ctx: CanvasRenderingContext2D, players: Player[], activePlayer: Player, timeMS: number) {
+  players.forEach((p) => {
+    p.aliveAvatars.forEach((avatar) => {
+      drawAvatar(ctx, avatar);
+      drawHealthbar(ctx, avatar, timeMS);
+      drawAvatarName(ctx, avatar);
+    });
   });
 
-  localPlayer.avatars.forEach((avatar) => {
-    drawAvatar(ctx, avatar, localPlayer.color)
-    if (avatar === localPlayer.activeAvatar) drawSelectedAvatarArrow(ctx, avatar, localPlayer.color)
-  });
+  drawSelectedAvatarArrow(ctx, activePlayer.activeAvatar, activePlayer.color);
+}
+
+export function drawGravestones(ctx: CanvasRenderingContext2D, gravestones: Gravestone[]) {
+  for (const grave of gravestones) {
+    ctx.fillStyle = "#000000ff";
+    ctx.fillRect(grave.worldPos.x, grave.worldPos.y, grave.width, grave.height);
+
+    // Cross or text
+    ctx.fillStyle = "#888";
+    ctx.font = "6px Arial";
+    ctx.fillText("RIP", grave.worldPos.x + grave.width / 2, grave.worldPos.y + grave.height / 2);
+  }
+}
+
+export function drawHitmarks(ctx: CanvasRenderingContext2D, hitmarks: HitmarkCache) {
+  const fontSize = 20;
+  const fontFamily = "Arial";
+  ctx.font = `${fontSize}px ${fontFamily}`;
+  ctx.textBaseline = "top";
+
+  hitmarks.merge();
+  for (const hitmark of hitmarks.hitmarks) {
+    ctx.fillStyle = hitmark.color;
+    ctx.fillText(hitmark.damageAmount.toString(), hitmark.position.x, hitmark.position.y);
+  }
 }
 
 export function drawWeaponUI(ctx: CanvasRenderingContext2D, x: number, y: number, localPlayer: Player, Weapons: Record<WeaponId, WeaponDef>) {
-  const fontSize = 40;
+  const fontSize = 20;
   const fontFamily = "Arial";
   const lineGap = 8;
   const padX = 12;

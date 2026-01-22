@@ -1,8 +1,19 @@
-import type { AABB, MovementResult } from "./types"
-import { Vec2, Avatar, Entity } from "./classes";
-import { terrain } from "./main";
+import type { AABB, ActiveInputs, MovementResult, Terrain } from "./types"
+import { Vec2, Avatar, Entity, Player } from "./classes";
 
-export function isSolidPixel(x: number, y: number): boolean {
+import {
+  MOVE_ACCEL,
+  AIR_ACCEL,
+  FRICTION_GROUND,
+  INTENTIONAL_FRICTION_GROUND_MULT as REVERSING_GROUND_FRICT_MULTI,
+  JUMP_IMPULSE_VEL_Y,
+  JUMP_MIN_TAKEOFF_VEL_X,
+  SLOPE_SLOW,
+} from './constants.ts';
+import { zzfx } from "zzfx";
+import { approachZero } from "./utils.ts";
+
+export function isSolidPixel(terrain: Terrain, x: number, y: number): boolean {
   if (!terrain.loaded || !terrain.bitmap) return false;
 
   const w = terrain.image.naturalWidth;
@@ -16,7 +27,38 @@ export function isSolidPixel(x: number, y: number): boolean {
   return terrain.bitmap[yi * terrain.image.naturalWidth + xi] === 1;
 }
 
-function overlapsTerrain(hitbox: AABB): boolean {
+export function destroyTerrain(terrain: Terrain, centerX: number, centerY: number, radius: number) {
+  if (!terrain.loaded || !terrain.ctx || !terrain.bitmap) return;
+
+  const w = terrain.image.naturalWidth;
+  const h = terrain.image.naturalHeight;
+
+  // Visual: punch a hole
+  terrain.ctx.globalCompositeOperation = "destination-out";
+  terrain.ctx.beginPath();
+  terrain.ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  terrain.ctx.fill();
+  terrain.ctx.globalCompositeOperation = "source-over";
+
+  // Collision: update bitmap
+  const r2 = radius * radius;
+  const minX = Math.max(0, Math.floor(centerX - radius));
+  const maxX = Math.min(w - 1, Math.ceil(centerX + radius));
+  const minY = Math.max(0, Math.floor(centerY - radius));
+  const maxY = Math.min(h - 1, Math.ceil(centerY + radius));
+
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      const dx = x - centerX;
+      const dy = y - centerY;
+      if (dx * dx + dy * dy <= r2) {
+        terrain.bitmap[y * w + x] = 0;
+      }
+    }
+  }
+}
+
+export function overlapsTerrain(terrain: Terrain, hitbox: AABB): boolean {
   const left = Math.floor(hitbox.x);
   const right = Math.floor(hitbox.x + hitbox.width - 1);
   const top = Math.floor(hitbox.y);
@@ -24,7 +66,7 @@ function overlapsTerrain(hitbox: AABB): boolean {
 
   for (let y = top; y <= bottom; y++) {
     for (let x = left; x <= right; x++) {
-      if (isSolidPixel(x, y)) return true;
+      if (isSolidPixel(terrain, x, y)) return true;
     }
   }
   return false;
@@ -54,17 +96,17 @@ function overlapsAny(a: AABB, candidates: AABB[]): boolean {
   return candidates.some((c) => hitboxesOverlap(a, c));
 }
 
-function isBlockedAtHeight(avatar: Avatar, dx: number, yOffset: number): boolean {
+function isBlockedAtHeight(terrain: Terrain, avatar: Avatar, dx: number, yOffset: number): boolean {
   // Check if there's solid terrain at a specific height on the player's side
   const testX = dx > 0
     ? avatar.worldPosFloat.x + avatar.width + dx  // right edge
     : avatar.worldPosFloat.x + dx;                 // left edge
   const testY = avatar.worldPosFloat.y + yOffset;
 
-  return isSolidPixel(testX, testY);
+  return isSolidPixel(terrain, testX, testY);
 }
 
-export function isWallCollision(avatar: Avatar, dx: number): boolean {
+export function isWallCollision(terrain: Terrain, avatar: Avatar, dx: number): boolean {
   if (dx === 0) return false;
 
   // Check upper body (top 70% of player)
@@ -76,7 +118,7 @@ export function isWallCollision(avatar: Avatar, dx: number): boolean {
   ];
 
   for (const yOffset of checkPoints) {
-    if (isBlockedAtHeight(avatar, dx, yOffset)) {
+    if (isBlockedAtHeight(terrain, avatar, dx, yOffset)) {
       return true; // Blocked at body level = wall
     }
   }
@@ -84,8 +126,8 @@ export function isWallCollision(avatar: Avatar, dx: number): boolean {
   return false; // Only blocked at feet = slope
 }
 
-export function clampMovement(entity: Entity, movement: Vec2, stepHeight: number = 0, collisionGroup: AABB[]): MovementResult {
-  if (!terrain.loaded) return { movement, stepUp: 0, hitGround: false, hitWall: false, hitRoof: false };
+export function checkCollisions(terrain: Terrain, entity: Entity, movement: Vec2, stepHeight: number = 0, collisionGroup: AABB[]): MovementResult {
+  if (!terrain.loaded) return { movement, stepUp: 0, collision: false, hitGround: false, hitWall: false, hitRoof: false };
 
   const baseX = entity.worldPosFloat.x;
   const baseY = entity.worldPosFloat.y;
@@ -97,7 +139,7 @@ export function clampMovement(entity: Entity, movement: Vec2, stepHeight: number
       width: entity.hitbox.width,
       height: entity.hitbox.height,
     };
-    return overlapsTerrain(hb) || overlapsAny(hb, collisionGroup);
+    return overlapsTerrain(terrain, hb) || overlapsAny(hb, collisionGroup);
   };
 
   // Resolve x and y in order.
@@ -143,6 +185,7 @@ export function clampMovement(entity: Entity, movement: Vec2, stepHeight: number
   }
 
   const afterX = { x: baseX + dx, y: baseY - stepUp };
+  let clampedY = false;
 
   dy = dy - stepUp;
 
@@ -153,6 +196,7 @@ export function clampMovement(entity: Entity, movement: Vec2, stepHeight: number
 
     // Only need to update if it overlaps.
     if (overlapsAt(afterX.x + 0, afterX.y + dy)) {
+      clampedY = true;
       let lo = 0;
       let hi = max;
       const eps = 0.5;
@@ -170,8 +214,67 @@ export function clampMovement(entity: Entity, movement: Vec2, stepHeight: number
     }
   }
 
-  const hitGround = movement.y > 0 && dy < movement.y;
-  const hitRoof = movement.y < 0 && dy > movement.y;
+  const hitGround = clampedY && movement.y > 0;
+  const hitRoof = clampedY && movement.y < 0;
+
   const hitWall = (movement.x != dx)
-  return { movement: new Vec2(dx, dy), stepUp: stepUp, hitGround: hitGround, hitWall: hitWall, hitRoof: hitRoof };
+  const collision = hitWall || clampedY;
+
+  return { movement: new Vec2(dx, dy), stepUp: stepUp, collision: collision, hitGround: hitGround, hitWall: hitWall, hitRoof: hitRoof };
+}
+
+function calculateInputX(inputs: ActiveInputs) {
+  let temp = 0;
+  if (inputs.a) temp -= 1;
+  if (inputs.d) temp += 1;
+  return temp;
+}
+
+export function applyAvatarInput(avatar: Avatar, timeMS: number, deltaTime: number, inputs: ActiveInputs) {
+  const inputX = calculateInputX(inputs);
+  const ax = (avatar.grounded ? MOVE_ACCEL : AIR_ACCEL) * inputX;
+  avatar.velocity.x += ax * deltaTime;
+
+  //-- Jump vel ?
+  if (inputs.space && avatar.canJump(timeMS)) {
+    zzfx(...[, .3, 494, .03, .01, .09, 5, .831500027726703, , 81, , , , .1, , , , .61, .05]); // JUMP USE THIS
+    avatar.lastJumpTime = timeMS;
+    avatar.velocity.y = -JUMP_IMPULSE_VEL_Y;
+    if (inputX !== 0) {
+      const takeoffVx = inputX * JUMP_MIN_TAKEOFF_VEL_X;
+      if (Math.abs(avatar.velocity.x) < Math.abs(takeoffVx)) {
+        avatar.velocity.x = takeoffVx;
+      }
+    }
+    avatar.grounded = false;
+    inputs.space = false;
+  }
+}
+
+export function applyGroundFriction(activePlayer: Player, inputs: ActiveInputs, avatar: Avatar, deltaTime: number) {
+  if (!avatar.grounded) return;
+
+  const inputX = calculateInputX(inputs);
+  let fric = FRICTION_GROUND * deltaTime;
+
+  if (avatar === activePlayer.activeAvatar && inputX !== 0) {
+    const reversing =
+      avatar.velocity.x !== 0 &&
+      Math.sign(avatar.velocity.x) !== Math.sign(inputX);
+
+    if (reversing) {
+      fric *= REVERSING_GROUND_FRICT_MULTI
+    }
+  }
+
+  avatar.velocity.x = approachZero(avatar.velocity.x, fric);
+}
+
+export function applySlopeSlow(avatar: Avatar, moved: Vec2, stepUp: number) {
+  if (stepUp > 0 && Math.abs(moved.x) > 0.01) {
+    const slopeRatio = stepUp / Math.abs(moved.x);
+    const slopeFactor = Math.min(slopeRatio, 1);
+    const slowDown = 1 - slopeFactor * SLOPE_SLOW;
+    avatar.velocity.x *= slowDown;
+  }
 }
