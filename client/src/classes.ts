@@ -162,6 +162,7 @@ export class Entity {
 }
 
 export class Avatar extends Entity {
+  jetpackEquipped: boolean;
   healthPoints: number;
   maxHealthPoints: number;
   healthPointsBeforeLastDamage: number;
@@ -178,6 +179,7 @@ export class Avatar extends Entity {
   constructor(owner: Player, startingHP: number, name: string, pos: Vec2, width: number, height: number, color: string, speed: number) {
     super(pos, width, height);
     this.gravestoneSpawned = false;
+    this.jetpackEquipped = false;
     this.dead = false;
     this.owner = owner;
     this.name = name;

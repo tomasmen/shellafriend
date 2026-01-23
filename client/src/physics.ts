@@ -9,6 +9,7 @@ import {
   JUMP_IMPULSE_VEL_Y,
   JUMP_MIN_TAKEOFF_VEL_X,
   SLOPE_SLOW,
+  JETPACK_THRUST,
 } from './constants.ts';
 import { zzfx } from "zzfx";
 import { approachZero } from "./utils.ts";
@@ -230,13 +231,16 @@ function calculateInputX(inputs: ActiveInputs) {
   return temp;
 }
 
-export function applyAvatarInput(avatar: Avatar, timeMS: number, deltaTime: number, inputs: ActiveInputs) {
+export function applyAvatarInput(avatar: Avatar, timeMS: number, deltaTime: number, inputs: ActiveInputs, activePlayer: Player) {
   const inputX = calculateInputX(inputs);
   const ax = (avatar.grounded ? MOVE_ACCEL : AIR_ACCEL) * inputX;
   avatar.velocity.x += ax * deltaTime;
 
   //-- Jump vel ?
-  if (inputs.space && avatar.canJump(timeMS)) {
+  if (inputs.space && avatar === activePlayer.activeAvatar && activePlayer.activeAvatar.jetpackEquipped) {
+    avatar.velocity.y -= Math.round(JETPACK_THRUST * deltaTime);
+  }
+  else if (inputs.space && avatar.canJump(timeMS)) {
     zzfx(...[, .3, 494, .03, .01, .09, 5, .831500027726703, , 81, , , , .1, , , , .61, .05]); // JUMP USE THIS
     avatar.lastJumpTime = timeMS;
     avatar.velocity.y = -JUMP_IMPULSE_VEL_Y;
@@ -247,8 +251,8 @@ export function applyAvatarInput(avatar: Avatar, timeMS: number, deltaTime: numb
       }
     }
     avatar.grounded = false;
-    inputs.space = false;
   }
+
 }
 
 export function applyGroundFriction(activePlayer: Player, inputs: ActiveInputs, avatar: Avatar, deltaTime: number) {

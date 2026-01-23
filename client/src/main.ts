@@ -47,13 +47,13 @@ window.onresize = (_) => {
 // GAME STATE
 export const players: Player[] = [];
 export const gravestones: Gravestone[] = [];
-export let activePlayerIndex: number = 0;
-export let activePlayer: Player;
 export const camera: Camera = { x: 0, y: 0, zoom: 2.5 }
 export const terrain: Terrain = initTerrain();
-export let hitmarkCache: HitmarkCache = new HitmarkCache();
-export let projectiles: Projectile[] = [];
 export const inputs: Inputs = initActiveInputs();
+export const hitmarkCache: HitmarkCache = new HitmarkCache();
+export const projectiles: Projectile[] = [];
+export let activePlayerIndex: number = 0;
+export let activePlayer: Player;
 export let cameraFollowPaused = false;
 
 function load() {
@@ -111,6 +111,10 @@ function load() {
       if (slot <= Object.entries(Weapons).length) {
         activePlayer.equipedWeapon = slot - 1;
       }
+    }
+
+    if (normalizedKey === "j") {
+      activePlayer.activeAvatar.jetpackEquipped = !activePlayer.activeAvatar.jetpackEquipped;
     }
   };
 
@@ -304,7 +308,7 @@ function updateAllAliveAvatars(timeMS: number, deltaTime: number) {
     }
 
     if (avatar === activePlayer.activeAvatar) {
-      applyAvatarInput(avatar, timeMS, deltaTime, inputs);
+      applyAvatarInput(avatar, timeMS, deltaTime, inputs, activePlayer);
     }
 
     avatar.applyGravity(deltaTime);
@@ -350,7 +354,9 @@ function updateAllAliveAvatars(timeMS: number, deltaTime: number) {
 }
 
 function removeDeadProjectiles() {
-  projectiles = projectiles.filter(p => !p.dead);
+  const newProjectiles = projectiles.filter(p => !p.dead);
+  projectiles.length = 0;
+  projectiles.push(...newProjectiles);
 }
 
 function updateProjectiles(timeMS: number, deltaTime: number) {

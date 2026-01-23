@@ -2,6 +2,7 @@
 // KNOBS
 export const SOLID_ALPHA_THRESHOLD = 10;
 export const GRAVITY = 300;
+export const JETPACK_THRUST = 500;
 export const MOVE_ACCEL = 300;
 export const AIR_ACCEL = 50;
 export const MAX_SPEED_X_AIR = 120;
