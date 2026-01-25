@@ -1,6 +1,8 @@
 import './index.css'
-import { type Terrain, type Camera, type ActiveInputs as Inputs, initTerrain, initActiveInputs } from "./types"
-import { Gravestone, HitmarkCache, Player, Projectile, Vec2 } from './classes';
+import { type Camera, type ActiveInputs as Inputs, initActiveInputs } from "./types"
+import { Gravestone } from './classes';
+import { Player } from './game/player.ts';
+import { Vec2 } from './game/vec2.ts';
 import { applyAvatarInput, applyGroundFriction, applySlopeSlow, checkCollisions, isWallCollision } from "./physics";
 import { Weapons } from './weapons';
 import { clampAbs, mod, screenToWorld } from "./utils";
@@ -30,6 +32,7 @@ import {
   drawWaterLevel,
   drawMapBorder,
 } from './draw.ts';
+import { GameState } from './game/state.ts';
 
 const wrapper = document.querySelector("#wrapper");
 const canvas = document.createElement("canvas");
@@ -44,24 +47,19 @@ window.onresize = (_) => {
   canvas.height = window.innerHeight;
 }
 
-// GAME STATE
-export const players: Player[] = [];
-export const gravestones: Gravestone[] = [];
-export const camera: Camera = { x: 0, y: 0, zoom: 2.5 }
-export const terrain: Terrain = initTerrain();
 export const inputs: Inputs = initActiveInputs();
-export const hitmarkCache: HitmarkCache = new HitmarkCache();
-export const projectiles: Projectile[] = [];
-export let activePlayerIndex: number = 0;
-export let activePlayer: Player;
+export const camera: Camera = { x: 0, y: 0, zoom: 2.5 }
 export let cameraFollowPaused = false;
 
-function load() {
-  terrain.image.src = "/maps/testmap1.png";
+// GAME STATE
+export const gameState: GameState = new GameState();
 
-  terrain.image.onload = () => {
-    const w = terrain.image.naturalWidth;
-    const h = terrain.image.naturalHeight;
+function load() {
+  gameState.terrain.image.src = "/maps/testmap1.png";
+
+  gameState.terrain.image.onload = () => {
+    const w = gameState.terrain.image.naturalWidth;
+    const h = gameState.terrain.image.naturalHeight;
 
     const viewW = canvas.width / camera.zoom;
     const viewH = canvas.height / camera.zoom;
@@ -73,7 +71,7 @@ function load() {
     const offCtx = offscreenCanvas.getContext("2d");
     if (!offCtx) throw new Error("No 2d context on offscreenCanvas");
 
-    offCtx.drawImage(terrain.image, 0, 0);
+    offCtx.drawImage(gameState.terrain.image, 0, 0);
     const imgData = offCtx.getImageData(0, 0, w, h);
     const data = imgData.data;
     const solidBitmap = new Uint8Array(w * h);
@@ -84,17 +82,16 @@ function load() {
       solidBitmap[p] = brightness > SOLID_ALPHA_THRESHOLD ? 1 : 0;
     }
 
-    terrain.loaded = true;
-    terrain.bitmap = solidBitmap;
-    terrain.imageData = imgData;
-    terrain.canvas = offscreenCanvas;
-    terrain.ctx = offCtx;
+    gameState.terrain.loaded = true;
+    gameState.terrain.bitmap = solidBitmap;
+    gameState.terrain.imageData = imgData;
+    gameState.terrain.canvas = offscreenCanvas;
+    gameState.terrain.ctx = offCtx;
   }
 
-  players.push(new Player("Jeff", "purple", [new Vec2(50, 30)]));
-  players.push(new Player("Anthony", "green", [new Vec2(80, 50)]));
-  players.push(new Player("Pete", "blue", [new Vec2(100, 50)]));
-  activePlayer = players[activePlayerIndex];
+  gameState.players.push(new Player("Jeff", "purple", [new Vec2(50, 30)]));
+  gameState.players.push(new Player("Anthony", "green", [new Vec2(80, 50)]));
+  gameState.players.push(new Player("Pete", "blue", [new Vec2(100, 50)]));
 
   window.oncontextmenu = e => e.preventDefault();
 
@@ -109,12 +106,12 @@ function load() {
       inputs.numbers.set(normalizedKey, true);
       const slot = parseInt(e.key.toLowerCase());
       if (slot <= Object.entries(Weapons).length) {
-        activePlayer.equipedWeapon = slot - 1;
+        gameState.activePlayer.equipedWeapon = slot - 1;
       }
     }
 
     if (normalizedKey === "j") {
-      activePlayer.activeAvatar.jetpackEquipped = !activePlayer.activeAvatar.jetpackEquipped;
+      gameState.activePlayer.activeAvatar.jetpackEquipped = !gameState.activePlayer.activeAvatar.jetpackEquipped;
     }
   };
 
@@ -176,7 +173,7 @@ function load() {
     e.preventDefault();
     if (e.button === 0) {
       inputs.mousedown = true;
-      Object.values(Weapons)[activePlayer.equipedWeapon].use(activePlayer, projectiles, inputs);
+      Object.values(Weapons)[gameState.activePlayer.equipedWeapon].use(gameState.activePlayer, gameState.projectiles, inputs);
     }
 
     if (e.button === 2) {
@@ -197,18 +194,18 @@ function load() {
 }
 
 function spawnGravestonesForDeadAvatars() {
-  for (const player of players) {
+  for (const player of gameState.players) {
     for (const avatar of player.allAvatars) {
-      if (avatar.dead && !avatar.gravestoneSpawned) {
+      if (avatar.isDead && !avatar.gravestoneSpawned) {
         avatar.gravestoneSpawned = true;
-        gravestones.push(new Gravestone(avatar.worldPosFloat.copy(), avatar.name));
+        gameState.gravestones.push(new Gravestone(avatar.worldPosFloat.copy(), avatar.name));
       }
     }
   }
 }
 
 function updateGravestones(deltaTime: number) {
-  for (const grave of gravestones) {
+  for (const grave of gameState.gravestones) {
     grave.applyGravity(deltaTime);
 
     const intended = new Vec2(
@@ -216,7 +213,7 @@ function updateGravestones(deltaTime: number) {
       grave.velocity.y * deltaTime
     );
 
-    const result = checkCollisions(terrain, grave, intended, 0, []);
+    const result = checkCollisions(gameState.terrain, grave, intended, 0, []);
 
     if (result.hitGround) {
       grave.grounded = true;
@@ -228,7 +225,7 @@ function updateGravestones(deltaTime: number) {
 }
 
 function updateCamera(deltaTime: number) {
-  const avatar = activePlayer.activeAvatar;
+  const avatar = gameState.activePlayer.activeAvatar;
   const avatarCenter = new Vec2(
     avatar.worldPos.x + avatar.width / 2,
     avatar.worldPos.y + avatar.height / 2
@@ -300,20 +297,20 @@ function updateCamera(deltaTime: number) {
 }
 
 function updateAllAliveAvatars(timeMS: number, deltaTime: number) {
-  const allAliveAvatars = players.flatMap(p => p.aliveAvatars);
+  const allAliveAvatars = gameState.players.flatMap(p => p.aliveAvatars);
 
   for (let avatar of allAliveAvatars) {
-    if (avatar.worldPos.y + avatar.height > terrain.image.naturalHeight - terrain.waterLevel) {
+    if (avatar.worldPos.y + avatar.height > gameState.terrain.image.naturalHeight - gameState.terrain.waterLevel) {
       avatar.inflictDamage(avatar.healthPoints, timeMS);
     }
 
-    if (avatar === activePlayer.activeAvatar) {
-      applyAvatarInput(avatar, timeMS, deltaTime, inputs, activePlayer);
+    if (avatar === gameState.activePlayer.activeAvatar) {
+      applyAvatarInput(avatar, timeMS, deltaTime, inputs, gameState.activePlayer);
     }
 
     avatar.applyGravity(deltaTime);
 
-    applyGroundFriction(activePlayer, inputs, avatar, deltaTime)
+    applyGroundFriction(gameState.activePlayer, inputs, avatar, deltaTime)
 
     // Terminal velocity
     avatar.velocity.x = clampAbs(
@@ -326,8 +323,8 @@ function updateAllAliveAvatars(timeMS: number, deltaTime: number) {
       avatar.velocity.y * deltaTime,
     );
 
-    const allHitboxesExceptSelf = players.flatMap(p => p.aliveAvatars.filter(a => a !== avatar)).map(a => a.hitbox);
-    const { movement: moved, stepUp, hitGround, hitWall, hitRoof } = checkCollisions(terrain, avatar, intended, avatar.grounded ? MAX_STEP_HEIGHT : 0, allHitboxesExceptSelf);
+    const allHitboxesExceptSelf = gameState.players.flatMap(p => p.aliveAvatars.filter(a => a !== avatar)).map(a => a.hitbox);
+    const { movement: moved, stepUp, hitGround, hitWall, hitRoof } = checkCollisions(gameState.terrain, avatar, intended, avatar.grounded ? MAX_STEP_HEIGHT : 0, allHitboxesExceptSelf);
 
     applySlopeSlow(avatar, moved, stepUp)
 
@@ -343,7 +340,7 @@ function updateAllAliveAvatars(timeMS: number, deltaTime: number) {
     }
 
     if (hitWall) {
-      if (avatar.velocity.y >= 0 && isWallCollision(terrain, avatar, intended.x)) {
+      if (avatar.velocity.y >= 0 && isWallCollision(gameState.terrain, avatar, intended.x)) {
         avatar.velocity.x = 0;
       }
     }
@@ -354,15 +351,15 @@ function updateAllAliveAvatars(timeMS: number, deltaTime: number) {
 }
 
 function removeDeadProjectiles() {
-  const newProjectiles = projectiles.filter(p => !p.dead);
-  projectiles.length = 0;
-  projectiles.push(...newProjectiles);
+  const newProjectiles = gameState.projectiles.filter(p => !p.dead);
+  gameState.projectiles.length = 0;
+  gameState.projectiles.push(...newProjectiles);
 }
 
 function updateProjectiles(timeMS: number, deltaTime: number) {
-  const collisionGroup = players.flatMap(p => p.aliveAvatars).map(a => a.hitbox);
+  const collisionGroup = gameState.players.flatMap(p => p.aliveAvatars).map(a => a.hitbox);
 
-  for (const projectile of projectiles) {
+  for (const projectile of gameState.projectiles) {
     if (projectile.dead) continue;
 
     projectile.applyThrust(deltaTime);
@@ -374,13 +371,13 @@ function updateProjectiles(timeMS: number, deltaTime: number) {
       projectile.velocity.y * deltaTime,
     );
 
-    const movementResult = checkCollisions(terrain, projectile, intended, 0, collisionGroup);
+    const movementResult = checkCollisions(gameState.terrain, projectile, intended, 0, collisionGroup);
 
     projectile.move(movementResult.movement.x, movementResult.movement.y);
 
-    const targets = players.flatMap(p => p.aliveAvatars);
+    const targets = gameState.players.flatMap(p => p.aliveAvatars);
     if (movementResult.collision) {
-      projectile.hit(terrain, timeMS, hitmarkCache, targets);
+      projectile.hit(gameState.terrain, timeMS, gameState.hitmarkCache, targets);
     }
   }
 }
@@ -396,24 +393,24 @@ function handleWeaponScroll(timeMS: number) {
   if (timeMS <= lastScroll + SCROLL_COOLDOWN) return;
 
   if (inputs.q) {
-    activePlayer.equipedWeapon = mod((activePlayer.equipedWeapon - 1), Object.entries(Weapons).length);
+    gameState.activePlayer.equipedWeapon = mod((gameState.activePlayer.equipedWeapon - 1), Object.entries(Weapons).length);
     lastScroll = timeMS;
   }
 
   if (inputs.e) {
-    activePlayer.equipedWeapon = mod((activePlayer.equipedWeapon + 1), Object.entries(Weapons).length);
+    gameState.activePlayer.equipedWeapon = mod((gameState.activePlayer.equipedWeapon + 1), Object.entries(Weapons).length);
     lastScroll = timeMS;
   }
 }
 
 function update(timeMS: number, deltaTime: number) {
-  if (!terrain.loaded) return;
+  if (!gameState.terrain.loaded) return;
 
   // Clamp to avoid huge change when changing tabs
   deltaTime = Math.min(deltaTime, 1 / 30);
 
   handleWeaponScroll(timeMS);
-  hitmarkCache.deleteExpired(timeMS);
+  gameState.hitmarkCache.deleteExpired(timeMS);
   updateAllAliveAvatars(timeMS, deltaTime);
   removeDeadProjectiles();
   updateProjectiles(timeMS, deltaTime);
@@ -428,18 +425,18 @@ function draw(timeMS: number) {
 
   // World coordinates
   startWorldDrawing(drawingContext, camera)
-  drawGravestones(drawingContext, gravestones)
-  drawMapBorder(drawingContext, terrain)
-  drawAvatars(drawingContext, players, activePlayer, timeMS);
-  drawProjectiles(drawingContext, projectiles);
-  drawShootingPoint(drawingContext, activePlayer);
-  drawWaterLevel(drawingContext, terrain)
-  drawTerrain(drawingContext, terrain);
-  drawHitmarks(drawingContext, hitmarkCache);
+  drawGravestones(drawingContext, gameState.gravestones)
+  drawMapBorder(drawingContext, gameState.terrain)
+  drawAvatars(drawingContext, gameState.players, gameState.activePlayer, timeMS);
+  drawProjectiles(drawingContext, gameState.projectiles);
+  drawShootingPoint(drawingContext, gameState.activePlayer);
+  drawWaterLevel(drawingContext, gameState.terrain)
+  drawTerrain(drawingContext, gameState.terrain);
+  drawHitmarks(drawingContext, gameState.hitmarkCache);
 
   // Canvas coordinates
   startCanvasDrawing(drawingContext)
-  drawWeaponUI(drawingContext, 20, 20, activePlayer, Weapons);
+  drawWeaponUI(drawingContext, 20, 20, gameState.activePlayer, Weapons);
 }
 
 let lastTickTimeMS = 0;

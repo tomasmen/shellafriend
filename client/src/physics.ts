@@ -1,5 +1,8 @@
-import type { AABB, ActiveInputs, MovementResult, Terrain } from "./types"
-import { Vec2, Avatar, Entity, Player } from "./classes";
+import type { AABB, ActiveInputs, MovementResult } from "./types"
+import { Terrain } from "./game/terrain.ts";
+import { Avatar, Entity } from "./classes";
+import { Vec2 } from "./game/vec2.ts";
+import { Player } from "./game/player.ts";
 
 import {
   MOVE_ACCEL,
@@ -28,36 +31,6 @@ export function isSolidPixel(terrain: Terrain, x: number, y: number): boolean {
   return terrain.bitmap[yi * terrain.image.naturalWidth + xi] === 1;
 }
 
-export function destroyTerrain(terrain: Terrain, centerX: number, centerY: number, radius: number) {
-  if (!terrain.loaded || !terrain.ctx || !terrain.bitmap) return;
-
-  const w = terrain.image.naturalWidth;
-  const h = terrain.image.naturalHeight;
-
-  // Visual: punch a hole
-  terrain.ctx.globalCompositeOperation = "destination-out";
-  terrain.ctx.beginPath();
-  terrain.ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-  terrain.ctx.fill();
-  terrain.ctx.globalCompositeOperation = "source-over";
-
-  // Collision: update bitmap
-  const r2 = radius * radius;
-  const minX = Math.max(0, Math.floor(centerX - radius));
-  const maxX = Math.min(w - 1, Math.ceil(centerX + radius));
-  const minY = Math.max(0, Math.floor(centerY - radius));
-  const maxY = Math.min(h - 1, Math.ceil(centerY + radius));
-
-  for (let y = minY; y <= maxY; y++) {
-    for (let x = minX; x <= maxX; x++) {
-      const dx = x - centerX;
-      const dy = y - centerY;
-      if (dx * dx + dy * dy <= r2) {
-        terrain.bitmap[y * w + x] = 0;
-      }
-    }
-  }
-}
 
 export function overlapsTerrain(terrain: Terrain, hitbox: AABB): boolean {
   const left = Math.floor(hitbox.x);

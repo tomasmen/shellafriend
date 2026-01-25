@@ -1,6 +1,8 @@
-import { Player, Projectile, Vec2 } from "./classes";
+import { Projectile } from "./classes";
 import type { WeaponId, WeaponDef } from "./types";
 import { zzfx } from "zzfx";
+import { Player } from "./game/player"
+import type { Vec2 } from "./game/vec2";
 
 export const Weapons: Record<WeaponId, WeaponDef> = {
   rpg: {
@@ -49,8 +51,8 @@ export const Weapons: Record<WeaponId, WeaponDef> = {
       const angleStepRad = angleStepDeg / 360 * 2 * Math.PI;
       for (let i = 1; i <= 2; i++) {
         const angleOffset = i * angleStepRad;
-        const nextUp = mainPellet.rotatedCopy(angleOffset);
-        const nextDown = mainPellet.rotatedCopy(-1 * angleOffset);
+        const nextUp = mainPellet.copy().rotate(angleOffset);
+        const nextDown = mainPellet.copy().rotate(-1 * angleOffset);
         pellets.push(nextUp);
         pellets.push(nextDown);
       }

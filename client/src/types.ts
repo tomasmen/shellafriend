@@ -1,4 +1,6 @@
-import { Entity, Vec2, type Player, type Projectile } from './classes.ts';
+import { type Projectile } from './classes.ts';
+import { Player } from "./game/player";
+import { Vec2 } from './game/vec2.ts';
 
 export type Camera = {
   x: number;
@@ -19,36 +21,6 @@ export type WeaponDef = {
 }
 
 
-export type WorldHitmark = {
-  position: Vec2;
-  damageAmount: number;
-  color: string;
-  lifetime: number;
-  spawnTime: number;
-  targetEntity: Entity | null;
-}
-
-export type Terrain = {
-  waterLevel: number;
-  loaded: boolean,
-  bitmap: Uint8Array | null,
-  imageData: ImageData | null,
-  image: HTMLImageElement
-  canvas: OffscreenCanvas | null;
-  ctx: OffscreenCanvasRenderingContext2D | null;
-}
-
-export function initTerrain(): Terrain {
-  return {
-    waterLevel: 20,
-    loaded: false,
-    bitmap: null,
-    imageData: null,
-    image: new Image(),
-    canvas: null,
-    ctx: null
-  }
-}
 
 export type MouseInfo = {
   pos: Vec2;
