@@ -21,3 +21,4 @@ export const CAMERA_SMOOTH_SPEED = 4;    // lerp speed (higher = faster)
 export const CAMERA_SNAP_SPEED = 12;
 export const AVATAR_MOVING_THRESHOLD = 5; // min velocity to count as "moving" for camera scroll
 export const SHOW_DAMAGE_TIME_MS: number = 2000;
+export const SCROLL_COOLDOWN = 200;

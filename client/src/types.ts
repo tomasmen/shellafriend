@@ -1,4 +1,5 @@
 import { type Projectile } from './classes.ts';
+import { SCROLL_COOLDOWN } from './constants.ts';
 import { Player } from "./game/player";
 import { Vec2 } from './game/vec2.ts';
 
@@ -37,6 +38,7 @@ export type ActiveInputs = {
   mousedown: boolean;
   rightclickdown: Vec2 | null;
   mouseInfo: MouseInfo;
+  lastScroll: number;
 }
 
 export function initActiveInputs(): ActiveInputs {
@@ -52,7 +54,8 @@ export function initActiveInputs(): ActiveInputs {
     mouseInfo: {
       pos: new Vec2(0, 0),
       lastMovementTimeMS: -1
-    }
+    },
+    lastScroll: -1 * SCROLL_COOLDOWN
   }
 }
 

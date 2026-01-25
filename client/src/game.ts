@@ -1,11 +1,11 @@
 import './index.css'
-import { type Camera, type ActiveInputs as Inputs, initActiveInputs } from "./types"
-import { Gravestone } from './classes';
+import { type ActiveInputs as Inputs, initActiveInputs } from "./types.ts"
+import { Gravestone } from './classes.ts';
 import { Player } from './game/player.ts';
 import { Vec2 } from './game/vec2.ts';
-import { applyAvatarInput, applyGroundFriction, applySlopeSlow, checkCollisions, isWallCollision } from "./physics";
-import { Weapons } from './weapons';
-import { clampAbs, mod, screenToWorld } from "./utils";
+import { applyAvatarInput, applyGroundFriction, applySlopeSlow, checkCollisions, isWallCollision } from "./physics.ts";
+import { Weapons } from './weapons.ts';
+import { clampAbs, mod, screenToWorld } from "./utils.ts";
 import {
   MAX_SPEED_X_AIR,
   MAX_SPEED_X_GROUND,
@@ -17,6 +17,7 @@ import {
   CAMERA_SMOOTH_SPEED,
   CAMERA_SNAP_SPEED,
   AVATAR_MOVING_THRESHOLD,
+  SCROLL_COOLDOWN,
 } from './constants.ts';
 import {
   clearCanvas,
@@ -34,38 +35,22 @@ import {
 } from './draw.ts';
 import { GameState } from './game/state.ts';
 
-const wrapper = document.querySelector("#wrapper");
-const canvas = document.createElement("canvas");
-const drawingContext = canvas.getContext("2d")!;
-
-wrapper?.appendChild(canvas);
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-
-window.onresize = (_) => {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-}
-
 export const inputs: Inputs = initActiveInputs();
-export const camera: Camera = { x: 0, y: 0, zoom: 2.5 }
-export let cameraFollowPaused = false;
 
 // GAME STATE
 export const gameState: GameState = new GameState();
 
 function load() {
   gameState.terrain.image.src = "/maps/testmap1.png";
-
   gameState.terrain.image.onload = () => {
     const w = gameState.terrain.image.naturalWidth;
     const h = gameState.terrain.image.naturalHeight;
 
-    const viewW = canvas.width / camera.zoom;
-    const viewH = canvas.height / camera.zoom;
+    const viewW = gameState.canvas.width / gameState.camera.zoom;
+    const viewH = gameState.canvas.height / gameState.camera.zoom;
 
-    camera.x = w / 2 - viewW / 2;
-    camera.y = h / 2 - viewH / 2;
+    gameState.camera.x = w / 2 - viewW / 2;
+    gameState.camera.y = h / 2 - viewH / 2;
 
     const offscreenCanvas = new OffscreenCanvas(w, h);
     const offCtx = offscreenCanvas.getContext("2d");
@@ -128,31 +113,31 @@ function load() {
   };
 
   window.onwheel = (e) => {
-    const rect = canvas.getBoundingClientRect();
+    const rect = gameState.canvas.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
 
     // World position under mouse BEFORE zoom change
-    const worldX = screenX / camera.zoom + camera.x;
-    const worldY = screenY / camera.zoom + camera.y;
+    const worldX = screenX / gameState.camera.zoom + gameState.camera.x;
+    const worldY = screenY / gameState.camera.zoom + gameState.camera.y;
 
     // Apply zoom
     const dir = Math.sign(e.deltaY);
-    camera.zoom -= dir * 0.1;
-    camera.zoom = Math.max(1, Math.min(camera.zoom, 10)); // clamp
+    gameState.camera.zoom -= dir * 0.1;
+    gameState.camera.zoom = Math.max(1, Math.min(gameState.camera.zoom, 10)); // clamp
 
-    // Adjust camera so the same world point stays under the mouse
-    camera.x = worldX - screenX / camera.zoom;
-    camera.y = worldY - screenY / camera.zoom;
+    // Adjust gameState.camera.so the same world point stays under the mouse
+    gameState.camera.x = worldX - screenX / gameState.camera.zoom;
+    gameState.camera.y = worldY - screenY / gameState.camera.zoom;
   }
 
   window.onmousemove = (e) => {
-    const rect = canvas.getBoundingClientRect();
+    const rect = gameState.canvas.getBoundingClientRect();
 
     // mouse position in canvas pixels
     const screen = new Vec2(e.clientX - rect.left, e.clientY - rect.top);
 
-    inputs.mouseInfo.pos = screenToWorld(screen, camera);
+    inputs.mouseInfo.pos = screenToWorld(screen, gameState.camera);
     inputs.mouseInfo.lastMovementTimeMS = performance.now();
 
     if (inputs.rightclickdown !== null) {
@@ -161,11 +146,11 @@ function load() {
         e.clientY - inputs.rightclickdown.y
       );
 
-      camera.x -= displacement.x * CAMERA_DRAG_SENS_FACTOR;
-      camera.y -= displacement.y * CAMERA_DRAG_SENS_FACTOR;
+      gameState.camera.x -= displacement.x * CAMERA_DRAG_SENS_FACTOR;
+      gameState.camera.y -= displacement.y * CAMERA_DRAG_SENS_FACTOR;
       inputs.rightclickdown = new Vec2(e.clientX, e.clientY);
 
-      cameraFollowPaused = true;
+      gameState.cameraFollowPaused = true;
     }
   };
 
@@ -233,23 +218,23 @@ function updateCamera(deltaTime: number) {
 
   const avatarSpeed = Math.hypot(avatar.velocity.x, avatar.velocity.y);
   if (avatarSpeed > AVATAR_MOVING_THRESHOLD) {
-    cameraFollowPaused = false;
+    gameState.cameraFollowPaused = false;
   }
 
-  if (cameraFollowPaused) return;
+  if (gameState.cameraFollowPaused) return;
 
-  const viewW = canvas.width / camera.zoom;
-  const viewH = canvas.height / camera.zoom;
+  const viewW = gameState.canvas.width / gameState.camera.zoom;
+  const viewH = gameState.canvas.height / gameState.camera.zoom;
 
-  const viewLeft = camera.x;
-  const viewRight = camera.x + viewW;
-  const viewTop = camera.y;
-  const viewBottom = camera.y + viewH;
+  const viewLeft = gameState.camera.x;
+  const viewRight = gameState.camera.x + viewW;
+  const viewTop = gameState.camera.y;
+  const viewBottom = gameState.camera.y + viewH;
 
   const dzHalfW = (viewW * CAMERA_DEADZONE) / 2;
   const dzHalfH = (viewH * CAMERA_DEADZONE) / 2;
-  const centerX = camera.x + viewW / 2;
-  const centerY = camera.y + viewH / 2;
+  const centerX = gameState.camera.x + viewW / 2;
+  const centerY = gameState.camera.y + viewH / 2;
 
   const dzLeft = centerX - dzHalfW;
   const dzRight = centerX + dzHalfW;
@@ -292,8 +277,8 @@ function updateCamera(deltaTime: number) {
   }
 
   const t = 1 - Math.exp(-speed * deltaTime);
-  camera.x += targetOffsetX * t;
-  camera.y += targetOffsetY * t;
+  gameState.camera.x += targetOffsetX * t;
+  gameState.camera.y += targetOffsetY * t;
 }
 
 function updateAllAliveAvatars(timeMS: number, deltaTime: number) {
@@ -387,19 +372,17 @@ function drawShootingPoint(ctx: CanvasRenderingContext2D, player: Player) {
   drawCircle(ctx, point, 0.001, "red", "red");
 }
 
-const SCROLL_COOLDOWN = 200;
-let lastScroll: number = -1 * SCROLL_COOLDOWN;
 function handleWeaponScroll(timeMS: number) {
-  if (timeMS <= lastScroll + SCROLL_COOLDOWN) return;
+  if (timeMS <= inputs.lastScroll + SCROLL_COOLDOWN) return;
 
   if (inputs.q) {
     gameState.activePlayer.equipedWeapon = mod((gameState.activePlayer.equipedWeapon - 1), Object.entries(Weapons).length);
-    lastScroll = timeMS;
+    inputs.lastScroll = timeMS;
   }
 
   if (inputs.e) {
     gameState.activePlayer.equipedWeapon = mod((gameState.activePlayer.equipedWeapon + 1), Object.entries(Weapons).length);
-    lastScroll = timeMS;
+    inputs.lastScroll = timeMS;
   }
 }
 
@@ -421,22 +404,22 @@ function update(timeMS: number, deltaTime: number) {
 }
 
 function draw(timeMS: number) {
-  clearCanvas(drawingContext, "black");
+  clearCanvas(gameState.renderingContext, "black");
 
   // World coordinates
-  startWorldDrawing(drawingContext, camera)
-  drawGravestones(drawingContext, gameState.gravestones)
-  drawMapBorder(drawingContext, gameState.terrain)
-  drawAvatars(drawingContext, gameState.players, gameState.activePlayer, timeMS);
-  drawProjectiles(drawingContext, gameState.projectiles);
-  drawShootingPoint(drawingContext, gameState.activePlayer);
-  drawWaterLevel(drawingContext, gameState.terrain)
-  drawTerrain(drawingContext, gameState.terrain);
-  drawHitmarks(drawingContext, gameState.hitmarkCache);
+  startWorldDrawing(gameState.renderingContext, gameState.camera)
+  drawGravestones(gameState.renderingContext, gameState.gravestones)
+  drawMapBorder(gameState.renderingContext, gameState.terrain)
+  drawAvatars(gameState.renderingContext, gameState.players, gameState.activePlayer, timeMS);
+  drawProjectiles(gameState.renderingContext, gameState.projectiles);
+  drawShootingPoint(gameState.renderingContext, gameState.activePlayer);
+  drawWaterLevel(gameState.renderingContext, gameState.terrain)
+  drawTerrain(gameState.renderingContext, gameState.terrain);
+  drawHitmarks(gameState.renderingContext, gameState.hitmarkCache);
 
   // Canvas coordinates
-  startCanvasDrawing(drawingContext)
-  drawWeaponUI(drawingContext, 20, 20, gameState.activePlayer, Weapons);
+  startCanvasDrawing(gameState.renderingContext)
+  drawWeaponUI(gameState.renderingContext, 20, 20, gameState.activePlayer, Weapons);
 }
 
 let lastTickTimeMS = 0;
