@@ -1,4 +1,4 @@
-import type { Entity } from "../classes";
+import type { Entity } from "./classes";
 import type { Vec2 } from "./vec2";
 
 export type WorldHitmark = {

@@ -1,4 +1,4 @@
-import { Avatar } from "../classes";
+import { Avatar } from "./classes";
 import type { Vec2 } from "./vec2";
 
 export class Player {

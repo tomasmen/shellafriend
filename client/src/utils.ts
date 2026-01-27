@@ -1,5 +1,5 @@
 import { Vec2 } from "./game/vec2";
-import type { AABB, Camera } from "./types";
+import type { AABB, Camera } from "./game/types";
 
 export function mod(n: number, m: number) {
   return ((n % m) + m) % m;

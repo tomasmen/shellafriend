@@ -1,8 +1,8 @@
-import type { Gravestone, Projectile } from "../classes";
+import type { Gravestone, Projectile } from "./classes";
 import { Terrain } from "./terrain";
 import { HitmarkCache } from "./hitmarks";
 import type { Player } from "./player";
-import type { Camera } from "../types";
+import type { Camera } from "./types";
 
 export interface AppState {
   screen: "lobby" | "game"
@@ -19,21 +19,7 @@ export class GameState {
   hitmarkCache: HitmarkCache;
   projectiles: Projectile[];
   activePlayerIndex: number;
-  canvas: HTMLCanvasElement;
-  renderingContext: CanvasRenderingContext2D;
   constructor() {
-    const wrapper = document.querySelector("#wrapper");
-    this.canvas = document.createElement("canvas");
-    wrapper?.appendChild(this.canvas);
-    this.renderingContext = this.canvas.getContext("2d")!;
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight;
-
-    window.onresize = (_) => {
-      this.canvas.width = window.innerWidth;
-      this.canvas.height = window.innerHeight;
-    }
-
     this.camera = { x: 0, y: 0, zoom: 2.5 }
     this.cameraFollowPaused = false;
     this.players = [];

@@ -1,10 +1,10 @@
 import { Avatar, Gravestone, Projectile } from "./classes";
-import { HitmarkCache } from "./game/hitmarks";
+import { HitmarkCache } from "./hitmarks";
 import { SHOW_DAMAGE_TIME_MS } from "./constants";
-import type { Player } from "./game/player";
-import { Vec2 } from "./game/vec2";
+import type { Player } from "./player";
+import { Vec2 } from "./vec2";
 import type { Camera, WeaponDef, WeaponId } from "./types";
-import { Terrain } from "./game/terrain";
+import { Terrain } from "./terrain";
 
 export function clearCanvas(ctx: CanvasRenderingContext2D, color: string) {
   ctx.fillStyle = color;

@@ -1,8 +1,8 @@
 import { Projectile } from "./classes";
 import type { WeaponId, WeaponDef } from "./types";
 import { zzfx } from "zzfx";
-import { Player } from "./game/player"
-import type { Vec2 } from "./game/vec2";
+import { Player } from "./player"
+import type { Vec2 } from "./vec2";
 
 export const Weapons: Record<WeaponId, WeaponDef> = {
   rpg: {

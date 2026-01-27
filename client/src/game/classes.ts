@@ -1,11 +1,12 @@
 import { zzfx } from "zzfx";
-import type { AABB, ActiveInputs } from "./types";
+import type { AABB } from "./types";
 import { GRAVITY, JUMP_COOLDOWN_MS, SHOW_DAMAGE_TIME_MS } from "./constants";
-import { distanceToRect } from "./utils";
-import type { Player } from "./game/player";
-import { Vec2 } from "./game/vec2";
-import type { HitmarkCache } from "./game/hitmarks";
-import type { Terrain } from "./game/terrain";
+import { distanceToRect } from "../utils";
+import type { Player } from "./player";
+import { Vec2 } from "./vec2";
+import type { HitmarkCache } from "./hitmarks";
+import type { Terrain } from "./terrain";
+import type { InputState } from "./inputs";
 
 export class Entity {
   worldPosFloat: Vec2;
@@ -96,14 +97,14 @@ export class Avatar extends Entity {
     this.lastDamageTime = timeMS;
   }
 
-  getNormalizedLookDir(inputs: ActiveInputs): Vec2 {
+  getNormalizedLookDir(inputs: InputState): Vec2 {
     const shootCenter = this.shootCenter;
     let directionVector = new Vec2(inputs.mouseInfo.pos.x - shootCenter.x, inputs.mouseInfo.pos.y - shootCenter.y);
     directionVector.normalize();
     return directionVector;
   }
 
-  getShootPoint(inputs: ActiveInputs): Vec2 {
+  getShootPoint(inputs: InputState): Vec2 {
     let lookDir = this.getNormalizedLookDir(inputs);
     const radius = Math.max(this.height / 2, this.width / 2) + 5;
 
