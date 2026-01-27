@@ -1,8 +1,5 @@
-import type { AABB, ActiveInputs, MovementResult } from "./types"
-import { Terrain } from "./game/terrain.ts";
+import type { AABB, MovementResult } from "./types"
 import { Avatar, Entity } from "./classes";
-import { Vec2 } from "./game/vec2.ts";
-import { Player } from "./game/player.ts";
 
 import {
   MOVE_ACCEL,
@@ -15,7 +12,11 @@ import {
   JETPACK_THRUST,
 } from './constants.ts';
 import { zzfx } from "zzfx";
-import { approachZero } from "./utils.ts";
+import { approachZero } from "../utils.ts";
+import type { Terrain } from "./terrain.ts";
+import { Vec2 } from "./vec2.ts";
+import type { InputState } from "./inputs.ts";
+import type { Player } from "./player.ts";
 
 export function isSolidPixel(terrain: Terrain, x: number, y: number): boolean {
   if (!terrain.loaded || !terrain.bitmap) return false;
@@ -197,14 +198,14 @@ export function checkCollisions(terrain: Terrain, entity: Entity, movement: Vec2
   return { movement: new Vec2(dx, dy), stepUp: stepUp, collision: collision, hitGround: hitGround, hitWall: hitWall, hitRoof: hitRoof };
 }
 
-function calculateInputX(inputs: ActiveInputs) {
+function calculateInputX(inputs: InputState) {
   let temp = 0;
   if (inputs.a) temp -= 1;
   if (inputs.d) temp += 1;
   return temp;
 }
 
-export function applyAvatarInput(avatar: Avatar, timeMS: number, deltaTime: number, inputs: ActiveInputs, activePlayer: Player) {
+export function applyAvatarInput(avatar: Avatar, timeMS: number, deltaTime: number, inputs: InputState, activePlayer: Player) {
   const inputX = calculateInputX(inputs);
   const ax = (avatar.grounded ? MOVE_ACCEL : AIR_ACCEL) * inputX;
   avatar.velocity.x += ax * deltaTime;
@@ -228,7 +229,7 @@ export function applyAvatarInput(avatar: Avatar, timeMS: number, deltaTime: numb
 
 }
 
-export function applyGroundFriction(activePlayer: Player, inputs: ActiveInputs, avatar: Avatar, deltaTime: number) {
+export function applyGroundFriction(activePlayer: Player, inputs: InputState, avatar: Avatar, deltaTime: number) {
   if (!avatar.grounded) return;
 
   const inputX = calculateInputX(inputs);
