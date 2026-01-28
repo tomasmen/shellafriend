@@ -30,6 +30,17 @@ export class GameState {
     this.activePlayerIndex = 0;
   }
 
+  reset() {
+    this.camera = { x: 0, y: 0, zoom: 2.5 }
+    this.cameraFollowPaused = false;
+    this.players = [];
+    this.gravestones = [];
+    this.terrain = new Terrain();
+    this.hitmarkCache = new HitmarkCache();
+    this.projectiles = [];
+    this.activePlayerIndex = 0;
+  }
+
   get activePlayer(): Player {
     return this.players[this.activePlayerIndex];
   }

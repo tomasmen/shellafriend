@@ -35,24 +35,58 @@ import {
 import { GameState } from './game/state.ts';
 import { InputState } from './game/inputs.ts';
 
+export const LOBBY_CONTAINER = document.querySelector("#lobby-container")!;
+export const START_BUTTON: HTMLButtonElement | null = document.querySelector("#create-button")!;
+export const EXIT_BUTTON: HTMLButtonElement | null = document.querySelector("#exit-button")!;
+export let STOP_GAME = false;
+START_BUTTON.onclick = startButtonOnClick;
+EXIT_BUTTON.onclick = exitButtonOnClick;
+
+export const GAME_CONTAINER: Element = document.querySelector("#game-container")!;
 export const CANVAS = document.createElement("canvas");
-export const CONTEXT = CANVAS.getContext("2d")!; // Possibly null ? need to deal with this, currently using bang !
+export const CONTEXT = CANVAS.getContext("2d")!; // TODO: Possibly null ? need to deal with this, currently using bang !
 export const INPUTS: InputState = new InputState();
 export const GAMESTATE: GameState = new GameState();
 
-setupCanvas(CANVAS);
-setupInputs(INPUTS, GAMESTATE);
-setupGame(GAMESTATE, CANVAS);
-window.requestAnimationFrame(tick);
+function exitButtonOnClick(_: PointerEvent) {
+  STOP_GAME = true;
+  GAMESTATE.reset();
+  showLobby(LOBBY_CONTAINER);
+  hideGame(GAME_CONTAINER);
+}
 
-function setupCanvas(canvas: HTMLCanvasElement) {
+function startButtonOnClick(_: PointerEvent) {
+  STOP_GAME = false;
+  hideLobby(LOBBY_CONTAINER);
+  showGame(GAME_CONTAINER);
+
+  setupCanvas(CANVAS, GAME_CONTAINER);
+  setupInputs(INPUTS, GAMESTATE);
+  setupGame(GAMESTATE, CANVAS);
+  window.requestAnimationFrame(tick);
+}
+
+function hideLobby(lobbyContainer: Element) {
+  lobbyContainer.classList.add("hidden");
+}
+function showGame(gameContainer: Element) {
+  gameContainer.classList.remove("hidden");
+}
+function showLobby(lobbyContainer: Element) {
+  lobbyContainer.classList.remove("hidden");
+}
+function hideGame(gameContainer: Element) {
+  gameContainer.classList.add("hidden");
+}
+
+function setupCanvas(canvas: HTMLCanvasElement, wrapper: Element) {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
   window.onresize = (_) => {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
   }
-  document.querySelector("#wrapper")?.appendChild(canvas);
+  wrapper.appendChild(canvas);
 }
 
 function setupInputs(inputs: InputState, gameState: GameState) {
@@ -441,6 +475,8 @@ function draw(timeMS: number) {
 
 let lastTickTimeMS = 0;
 function tick(timeMS: number) {
+  if (STOP_GAME) return;
+
   if (lastTickTimeMS === 0) lastTickTimeMS = timeMS;
 
   const dt = (timeMS - lastTickTimeMS) / 1000;

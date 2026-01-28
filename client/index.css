@@ -6,15 +6,23 @@ body {
 }
 
 .hidden {
-  display: none;
+  display: none !important;
 }
 
-#wrapper {
+#exit-button {
+  position: absolute;
+  font-size: 2rem;
+  padding: 0.5rem 1rem;
+  top: 10px;
+  right: 10px;
+}
+
+#game-container {
   width: 100vw;
   height: 100vh;
 }
 
-#main-page {
+#lobby-container {
   width: 100vw;
   height: 100vh;
   display: flex;
