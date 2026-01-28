@@ -5,6 +5,21 @@ import type { Player } from "./player";
 import { Vec2 } from "./vec2";
 import type { Camera, WeaponDef, WeaponId } from "./types";
 import { Terrain } from "./terrain";
+import type { InputState } from "./inputs";
+import type { GameState } from "./state";
+
+export function drawShootingPoint(ctx: CanvasRenderingContext2D, player: Player, inputs: InputState) {
+  const point = player.activeAvatar.getShootPoint(inputs);
+  drawCircle(ctx, point, 0.001, "red", "red");
+}
+
+export function drawRoundTime(ctx: CanvasRenderingContext2D, gameState: GameState) {
+  ctx.fillStyle = "green";
+  const timeString = `${((gameState.currentTimeMS - gameState.roundStartTime) / 1000).toFixed(2)}`;
+  const stringWidth = ctx.measureText(timeString).width;
+  ctx.fillText(timeString, ctx.canvas.width / 2 - stringWidth / 2, 10);
+
+}
 
 export function clearCanvas(ctx: CanvasRenderingContext2D, color: string) {
   ctx.fillStyle = color;

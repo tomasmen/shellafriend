@@ -14,10 +14,13 @@ export class Player {
     this.color = color;
     this.playerName = playerName;
     for (let i = 0; i < avatars.length; i++) {
+      const randomIndex = Math.floor(Math.random() * avatarNames.length);
+      const randomName = avatarNames[randomIndex];
+      avatarNames.splice(randomIndex, 1);
       const newAvatar = new Avatar(
         this,
         100,
-        `${i + 1}`,
+        `${randomName}`,
         avatars[i],
         10,
         15,
@@ -25,6 +28,21 @@ export class Player {
       )
       this.allAvatars.push(newAvatar);
     }
+  }
+
+  nextAvatar() {
+    if (this.aliveAvatars.length === 1) return;
+    for (let i = 0; i < this.allAvatars.length; i++) {
+      if (i !== this.activeAvatarIndex && !this.allAvatars[i].isDead) {
+        this.activeAvatarIndex = i;
+        return;
+      }
+    }
+  }
+
+  get isOutOfGame(): boolean {
+    if (this.aliveAvatars.length <= 0) return true;
+    return false;
   }
 
   get activeAvatar(): Avatar {
@@ -35,3 +53,36 @@ export class Player {
     return this.allAvatars.filter(a => !a.isDead);
   }
 }
+
+export const avatarNames: string[] = [
+  'atlas',
+  'becker',
+  'cairo',
+  'dax',
+  'echo',
+  'finn',
+  'gale',
+  'hugo',
+  'ion',
+  'jace',
+  'kai',
+  'luna',
+  'milo',
+  'nova',
+  'otto',
+  'piper',
+  'quinn',
+  'river',
+  'sage',
+  'tate',
+  'umi',
+  'vance',
+  'wren',
+  'xander',
+  'yosef',
+  'zeke',
+  'alma',
+  'bruno',
+  'cora',
+  'dante',
+];

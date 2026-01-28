@@ -4,13 +4,12 @@ import { Player } from './game/player.ts';
 import { Vec2 } from './game/vec2.ts';
 import { applyAvatarInput, applyGroundFriction, applySlopeSlow, checkCollisions, isWallCollision } from "./game/physics.ts";
 import { Weapons } from './game/weapons.ts';
-import { clampAbs, mod, screenToWorld } from "./utils.ts";
+import { clampAbs, mod } from "./utils.ts";
 import {
   MAX_SPEED_X_AIR,
   MAX_SPEED_X_GROUND,
   MAX_STEP_HEIGHT,
   SOLID_ALPHA_THRESHOLD,
-  CAMERA_DRAG_SENS_FACTOR,
   CAMERA_DEADZONE,
   CAMERA_EDGE_ZONE,
   CAMERA_SMOOTH_SPEED,
@@ -21,19 +20,20 @@ import {
 import {
   clearCanvas,
   startCanvasDrawing,
+  startWorldDrawing,
   drawAvatars,
-  drawCircle,
   drawProjectiles,
   drawTerrain,
-  startWorldDrawing,
   drawWeaponUI,
   drawHitmarks,
   drawGravestones,
   drawWaterLevel,
   drawMapBorder,
+  drawShootingPoint,
+  drawRoundTime,
 } from './game/draw.ts';
 import { GameState } from './game/state.ts';
-import { InputState } from './game/inputs.ts';
+import { InputState, setupInputs } from './game/inputs.ts';
 
 export const LOBBY_CONTAINER = document.querySelector("#lobby-container")!;
 export const START_BUTTON: HTMLButtonElement | null = document.querySelector("#create-button")!;
@@ -51,32 +51,26 @@ export const GAMESTATE: GameState = new GameState();
 function exitButtonOnClick(_: PointerEvent) {
   STOP_GAME = true;
   GAMESTATE.reset();
-  showLobby(LOBBY_CONTAINER);
-  hideGame(GAME_CONTAINER);
+  hide(GAME_CONTAINER);
+  show(LOBBY_CONTAINER);
 }
 
 function startButtonOnClick(_: PointerEvent) {
   STOP_GAME = false;
-  hideLobby(LOBBY_CONTAINER);
-  showGame(GAME_CONTAINER);
+  hide(LOBBY_CONTAINER);
+  show(GAME_CONTAINER);
 
   setupCanvas(CANVAS, GAME_CONTAINER);
-  setupInputs(INPUTS, GAMESTATE);
+  setupInputs(INPUTS, GAMESTATE, CANVAS);
   setupGame(GAMESTATE, CANVAS);
   window.requestAnimationFrame(tick);
 }
 
-function hideLobby(lobbyContainer: Element) {
-  lobbyContainer.classList.add("hidden");
+function hide(element: Element) {
+  element.classList.add("hidden");
 }
-function showGame(gameContainer: Element) {
-  gameContainer.classList.remove("hidden");
-}
-function showLobby(lobbyContainer: Element) {
-  lobbyContainer.classList.remove("hidden");
-}
-function hideGame(gameContainer: Element) {
-  gameContainer.classList.add("hidden");
+function show(element: Element) {
+  element.classList.remove("hidden");
 }
 
 function setupCanvas(canvas: HTMLCanvasElement, wrapper: Element) {
@@ -87,107 +81,6 @@ function setupCanvas(canvas: HTMLCanvasElement, wrapper: Element) {
     canvas.height = window.innerHeight;
   }
   wrapper.appendChild(canvas);
-}
-
-function setupInputs(inputs: InputState, gameState: GameState) {
-  window.oncontextmenu = e => e.preventDefault();
-
-  window.onkeydown = (e) => {
-    const normalizedKey = e.key.toLowerCase();
-    if (normalizedKey === "a") inputs.a = true;
-    if (normalizedKey === "d") inputs.d = true;
-    if (normalizedKey === "q") inputs.q = true;
-    if (normalizedKey === "e") inputs.e = true;
-    if (normalizedKey === " ") inputs.space = true;
-    if (["1", "2", "3", "4", "5", "6", "7", "8", "9"].includes(normalizedKey)) {
-      inputs.numbers.set(normalizedKey, true);
-      const slot = parseInt(e.key.toLowerCase());
-      if (slot <= Object.entries(Weapons).length) {
-        gameState.activePlayer.equipedWeapon = slot - 1;
-      }
-    }
-
-    if (normalizedKey === "j") {
-      gameState.activePlayer.activeAvatar.jetpackEquipped = !gameState.activePlayer.activeAvatar.jetpackEquipped;
-    }
-  };
-
-  window.onkeyup = (e) => {
-    const normalizedKey = e.key.toLowerCase();
-    if (normalizedKey === "a") inputs.a = false;
-    if (normalizedKey === "d") inputs.d = false;
-    if (normalizedKey === "q") inputs.q = false;
-    if (normalizedKey === "e") inputs.e = false;
-    if (normalizedKey === " ") inputs.space = false;
-    if (["1", "2", "3", "4", "5", "6", "7", "8", "9"].includes(normalizedKey)) {
-      inputs.numbers.set(normalizedKey, false);
-    }
-  };
-
-  window.onwheel = (e) => {
-    const rect = CANVAS.getBoundingClientRect();
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
-
-    // World position under mouse BEFORE zoom change
-    const worldX = screenX / gameState.camera.zoom + gameState.camera.x;
-    const worldY = screenY / gameState.camera.zoom + gameState.camera.y;
-
-    // Apply zoom
-    const dir = Math.sign(e.deltaY);
-    gameState.camera.zoom -= dir * 0.1;
-    gameState.camera.zoom = Math.max(1, Math.min(gameState.camera.zoom, 10)); // clamp
-
-    // Adjust gameState.camera.so the same world point stays under the mouse
-    gameState.camera.x = worldX - screenX / gameState.camera.zoom;
-    gameState.camera.y = worldY - screenY / gameState.camera.zoom;
-  }
-
-  window.onmousemove = (e) => {
-    const rect = CANVAS.getBoundingClientRect();
-
-    // mouse position in canvas pixels
-    const screen = new Vec2(e.clientX - rect.left, e.clientY - rect.top);
-
-    inputs.mouseInfo.pos = screenToWorld(screen, gameState.camera);
-    inputs.mouseInfo.lastMovementTimeMS = performance.now();
-
-    if (inputs.rightclickdown !== null) {
-      const displacement = new Vec2(
-        e.clientX - inputs.rightclickdown.x,
-        e.clientY - inputs.rightclickdown.y
-      );
-
-      gameState.camera.x -= displacement.x * CAMERA_DRAG_SENS_FACTOR;
-      gameState.camera.y -= displacement.y * CAMERA_DRAG_SENS_FACTOR;
-      inputs.rightclickdown = new Vec2(e.clientX, e.clientY);
-
-      gameState.cameraFollowPaused = true;
-    }
-  };
-
-  window.onmousedown = (e) => {
-    e.preventDefault();
-    if (e.button === 0) {
-      inputs.mousedown = true;
-      Object.values(Weapons)[gameState.activePlayer.equipedWeapon].use(gameState.activePlayer, gameState.projectiles, inputs);
-    }
-
-    if (e.button === 2) {
-      inputs.rightclickdown = new Vec2(e.clientX, e.clientY);
-      console.log("Right click down.")
-    }
-  }
-
-  window.onmouseup = (e) => {
-    if (e.button === 0) {
-      inputs.mousedown = false;
-    }
-
-    if (e.button === 2) {
-      inputs.rightclickdown = null;
-    }
-  }
 }
 
 function setupGame(gameState: GameState, canvas: HTMLCanvasElement) {
@@ -418,10 +311,6 @@ function updateProjectiles(timeMS: number, deltaTime: number) {
   }
 }
 
-function drawShootingPoint(ctx: CanvasRenderingContext2D, player: Player) {
-  const point = player.activeAvatar.getShootPoint(INPUTS);
-  drawCircle(ctx, point, 0.001, "red", "red");
-}
 
 function handleWeaponScroll(timeMS: number) {
   if (timeMS <= INPUTS.lastScroll + SCROLL_COOLDOWN) return;
@@ -439,6 +328,14 @@ function handleWeaponScroll(timeMS: number) {
 
 function update(timeMS: number, deltaTime: number) {
   if (!GAMESTATE.terrain.loaded) return;
+
+  GAMESTATE.currentTimeMS = timeMS;
+
+  if (GAMESTATE.roundPhase === "simulation") {
+    if (GAMESTATE.projectiles.length <= 0) {
+      GAMESTATE.nextRound();
+    }
+  }
 
   // Clamp to avoid huge change when changing tabs
   deltaTime = Math.min(deltaTime, 1 / 30);
@@ -463,13 +360,14 @@ function draw(timeMS: number) {
   drawMapBorder(CONTEXT, GAMESTATE.terrain)
   drawAvatars(CONTEXT, GAMESTATE.players, GAMESTATE.activePlayer, timeMS);
   drawProjectiles(CONTEXT, GAMESTATE.projectiles);
-  drawShootingPoint(CONTEXT, GAMESTATE.activePlayer);
+  drawShootingPoint(CONTEXT, GAMESTATE.activePlayer, INPUTS);
   drawWaterLevel(CONTEXT, GAMESTATE.terrain)
   drawTerrain(CONTEXT, GAMESTATE.terrain);
   drawHitmarks(CONTEXT, GAMESTATE.hitmarkCache);
 
   // Canvas coordinates
-  startCanvasDrawing(CONTEXT)
+  startCanvasDrawing(CONTEXT);
+  drawRoundTime(CONTEXT, GAMESTATE);
   drawWeaponUI(CONTEXT, 20, 20, GAMESTATE.activePlayer, Weapons);
 }
 

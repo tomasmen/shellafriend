@@ -22,3 +22,4 @@ export const CAMERA_SNAP_SPEED = 12;
 export const AVATAR_MOVING_THRESHOLD = 5; // min velocity to count as "moving" for camera scroll
 export const SHOW_DAMAGE_TIME_MS: number = 2000;
 export const SCROLL_COOLDOWN = 200;
+export const ROUND_PHASE_SIMULATION_LENGTH = 5000;
