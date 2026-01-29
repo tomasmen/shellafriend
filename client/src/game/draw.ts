@@ -15,10 +15,14 @@ export function drawShootingPoint(ctx: CanvasRenderingContext2D, player: Player,
 
 export function drawRoundTime(ctx: CanvasRenderingContext2D, gameState: GameState) {
   ctx.fillStyle = "green";
-  const timeString = `${((gameState.currentTimeMS - gameState.roundStartTime) / 1000).toFixed(2)}`;
+  let timeString = ""
+  if (gameState.roundPhase === "simulation") {
+    timeString = "..."
+  } else {
+    timeString = `${Math.round(gameState.timeLeft / 1000)}`;
+  }
   const stringWidth = ctx.measureText(timeString).width;
   ctx.fillText(timeString, ctx.canvas.width / 2 - stringWidth / 2, 10);
-
 }
 
 export function clearCanvas(ctx: CanvasRenderingContext2D, color: string) {

@@ -23,3 +23,5 @@ export const AVATAR_MOVING_THRESHOLD = 5; // min velocity to count as "moving" f
 export const SHOW_DAMAGE_TIME_MS: number = 2000;
 export const SCROLL_COOLDOWN = 200;
 export const ROUND_PHASE_SIMULATION_LENGTH = 5000;
+export const ROUND_PHASE_DURATIONS_MS: Map<string, number> =
+  new Map([["action", 60000], ["simulation", 30000], ["ending", 5000]]);

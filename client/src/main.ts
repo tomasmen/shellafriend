@@ -63,6 +63,7 @@ function startButtonOnClick(_: PointerEvent) {
   setupCanvas(CANVAS, GAME_CONTAINER);
   setupInputs(INPUTS, GAMESTATE, CANVAS);
   setupGame(GAMESTATE, CANVAS);
+  GAMESTATE.starting = true;
   window.requestAnimationFrame(tick);
 }
 
@@ -330,11 +331,13 @@ function update(timeMS: number, deltaTime: number) {
   if (!GAMESTATE.terrain.loaded) return;
 
   GAMESTATE.currentTimeMS = timeMS;
+  if (GAMESTATE.starting) {
+    GAMESTATE.phaseStartTime = timeMS;
+    GAMESTATE.starting = false;
+  }
 
-  if (GAMESTATE.roundPhase === "simulation") {
-    if (GAMESTATE.projectiles.length <= 0) {
-      GAMESTATE.nextRound();
-    }
+  if (GAMESTATE.isPhaseOverTime || GAMESTATE.isSimulationOver) {
+    GAMESTATE.nextPhase();
   }
 
   // Clamp to avoid huge change when changing tabs
