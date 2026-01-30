@@ -1,4 +1,5 @@
 import type { Entity } from "./classes";
+import type { GameState } from "./state";
 import type { Vec2 } from "./vec2";
 
 export type WorldHitmark = {
@@ -62,7 +63,7 @@ export class HitmarkCache {
     this.changed = true;
   }
 
-  deleteExpired(timeMS: number) {
-    this.hitmarks = this.hitmarks.filter(h => h.spawnTime + h.lifetime > timeMS);
+  deleteExpired(gameState: GameState) {
+    this.hitmarks = this.hitmarks.filter(h => h.spawnTime + h.lifetime > gameState.currentTimeMS);
   }
 }

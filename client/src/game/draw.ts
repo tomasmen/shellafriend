@@ -1,15 +1,13 @@
-import { Avatar, Gravestone, Projectile } from "./classes";
-import { HitmarkCache } from "./hitmarks";
+import { Avatar } from "./classes";
 import { SHOW_DAMAGE_TIME_MS } from "./constants";
 import type { Player } from "./player";
 import { Vec2 } from "./vec2";
-import type { Camera, WeaponDef, WeaponId } from "./types";
-import { Terrain } from "./terrain";
+import type { WeaponDef, WeaponId } from "./types";
 import type { InputState } from "./inputs";
 import type { GameState } from "./state";
 
-export function drawShootingPoint(ctx: CanvasRenderingContext2D, player: Player, inputs: InputState) {
-  const point = player.activeAvatar.getShootPoint(inputs);
+export function drawShootingPoint(ctx: CanvasRenderingContext2D, gameState: GameState, inputs: InputState) {
+  const point = gameState.activePlayer.activeAvatar.getShootPoint(inputs);
   drawCircle(ctx, point, 0.001, "red", "red");
 }
 
@@ -95,34 +93,34 @@ export function drawSelectedAvatarArrow(ctx: CanvasRenderingContext2D, avatar: A
   drawPoly(ctx, vertices, "#00ffff99", color);
 }
 
-export function startWorldDrawing(ctx: CanvasRenderingContext2D, camera: Camera) {
-  ctx.setTransform(camera.zoom, 0, 0, camera.zoom, -camera.x * camera.zoom, -camera.y * camera.zoom);
+export function startWorldDrawing(ctx: CanvasRenderingContext2D, gameState: GameState) {
+  ctx.setTransform(gameState.camera.zoom, 0, 0, gameState.camera.zoom, -gameState.camera.x * gameState.camera.zoom, -gameState.camera.y * gameState.camera.zoom);
 }
 
 export function startCanvasDrawing(ctx: CanvasRenderingContext2D) {
   ctx.setTransform();
 }
 
-export function drawTerrain(ctx: CanvasRenderingContext2D, terrain: Terrain) {
-  if (!terrain.loaded) return;
+export function drawTerrain(ctx: CanvasRenderingContext2D, gameState: GameState) {
+  if (!gameState.terrain.loaded) return;
 
 
-  ctx.drawImage(terrain.canvas!, 0, 0);
+  ctx.drawImage(gameState.terrain.canvas!, 0, 0);
 }
 
-export function drawMapBorder(ctx: CanvasRenderingContext2D, terrain: Terrain) {
+export function drawMapBorder(ctx: CanvasRenderingContext2D, gameState: GameState) {
   const borderWidth = 5;
   ctx.fillStyle = "#ffffff88";
-  ctx.fillRect(-borderWidth, -borderWidth, terrain.image.naturalWidth + borderWidth * 2, terrain.image.naturalHeight + borderWidth * 2);
+  ctx.fillRect(-borderWidth, -borderWidth, gameState.terrain.image.naturalWidth + borderWidth * 2, gameState.terrain.image.naturalHeight + borderWidth * 2);
 }
 
-export function drawWaterLevel(ctx: CanvasRenderingContext2D, terrain: Terrain) {
+export function drawWaterLevel(ctx: CanvasRenderingContext2D, gameState: GameState) {
   ctx.fillStyle = "#0044ffff";
-  ctx.fillRect(0, terrain.image.naturalHeight - terrain.waterLevel, terrain.image.naturalWidth, terrain.waterLevel);
+  ctx.fillRect(0, gameState.terrain.image.naturalHeight - gameState.terrain.waterLevel, gameState.terrain.image.naturalWidth, gameState.terrain.waterLevel);
 }
 
-export function drawProjectiles(ctx: CanvasRenderingContext2D, projectiles: Projectile[]) {
-  for (const projetile of projectiles) {
+export function drawProjectiles(ctx: CanvasRenderingContext2D, gameState: GameState) {
+  for (const projetile of gameState.projectiles) {
     drawCircle(ctx, projetile.worldPos, 0.1, "#ff0000ff", "#ff4444ff");
   }
 }
@@ -163,8 +161,8 @@ export function drawAvatarName(ctx: CanvasRenderingContext2D, avatar: Avatar) {
   ctx.fillText(name, left, top);
 }
 
-export function drawAvatars(ctx: CanvasRenderingContext2D, players: Player[], activePlayer: Player, timeMS: number) {
-  players.forEach((p) => {
+export function drawAvatars(ctx: CanvasRenderingContext2D, gameState: GameState, timeMS: number) {
+  gameState.players.forEach((p) => {
     p.aliveAvatars.forEach((avatar) => {
       drawAvatar(ctx, avatar);
       drawHealthbar(ctx, avatar, timeMS);
@@ -172,11 +170,11 @@ export function drawAvatars(ctx: CanvasRenderingContext2D, players: Player[], ac
     });
   });
 
-  drawSelectedAvatarArrow(ctx, activePlayer.activeAvatar, activePlayer.color);
+  drawSelectedAvatarArrow(ctx, gameState.activePlayer.activeAvatar, gameState.activePlayer.color);
 }
 
-export function drawGravestones(ctx: CanvasRenderingContext2D, gravestones: Gravestone[]) {
-  for (const grave of gravestones) {
+export function drawGravestones(ctx: CanvasRenderingContext2D, gameState: GameState) {
+  for (const grave of gameState.gravestones) {
     ctx.fillStyle = "#000000ff";
     ctx.fillRect(grave.worldPos.x, grave.worldPos.y, grave.width, grave.height);
 
@@ -187,14 +185,14 @@ export function drawGravestones(ctx: CanvasRenderingContext2D, gravestones: Grav
   }
 }
 
-export function drawHitmarks(ctx: CanvasRenderingContext2D, hitmarks: HitmarkCache) {
+export function drawHitmarks(ctx: CanvasRenderingContext2D, gameState: GameState) {
   const fontSize = 20;
   const fontFamily = "Arial";
   ctx.font = `${fontSize}px ${fontFamily}`;
   ctx.textBaseline = "top";
 
-  hitmarks.merge();
-  for (const hitmark of hitmarks.hitmarks) {
+  gameState.hitmarkCache.merge();
+  for (const hitmark of gameState.hitmarkCache.hitmarks) {
     ctx.fillStyle = hitmark.color;
     ctx.fillText(hitmark.damageAmount.toString(), hitmark.position.x, hitmark.position.y);
   }
