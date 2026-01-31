@@ -34,6 +34,8 @@ export function isSolidPixel(terrain: Terrain, x: number, y: number): boolean {
 
 
 export function overlapsTerrain(terrain: Terrain, hitbox: AABB): boolean {
+  if (!terrain.loaded) return true;
+
   const left = Math.floor(hitbox.x);
   const right = Math.floor(hitbox.x + hitbox.width - 1);
   const top = Math.floor(hitbox.y);

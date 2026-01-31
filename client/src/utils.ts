@@ -34,3 +34,15 @@ export function screenToWorld(screenCoord: Vec2, camera: Camera): Vec2 {
     camera.y + screenCoord.y / camera.zoom
   );
 }
+
+export function chunk<T>(arr: readonly T[], size: number): T[][] {
+  if (!Number.isInteger(size) || size <= 0) {
+    throw new Error("Chunk size must be a positive integer");
+  }
+
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    out.push(arr.slice(i, i + size));
+  }
+  return out;
+}

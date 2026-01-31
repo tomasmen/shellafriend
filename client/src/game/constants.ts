@@ -25,3 +25,6 @@ export const SCROLL_COOLDOWN = 200;
 export const ROUND_PHASE_SIMULATION_LENGTH = 5000;
 export const ROUND_PHASE_DURATIONS_MS: Map<string, number> =
   new Map([["action", 60000], ["simulation", 30000], ["ending", 5000]]);
+export const AVATAR_WIDTH = 10;
+export const AVATAR_HEIGHT = 15;
+export const SPAWN_FINDER_TRIES_RATIO = 3;

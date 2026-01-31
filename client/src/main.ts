@@ -2,9 +2,9 @@ import '../index.css'
 import { Gravestone } from './game/classes.ts';
 import { Player } from './game/player.ts';
 import { Vec2 } from './game/vec2.ts';
-import { applyAvatarInput, applyGroundFriction, applySlopeSlow, checkCollisions, isWallCollision } from "./game/physics.ts";
+import { applyAvatarInput, applyGroundFriction, applySlopeSlow, checkCollisions, isWallCollision, overlapsTerrain } from "./game/physics.ts";
 import { Weapons } from './game/weapons.ts';
-import { clampAbs, mod } from "./utils.ts";
+import { chunk, clampAbs, mod } from "./utils.ts";
 import {
   MAX_SPEED_X_AIR,
   MAX_SPEED_X_GROUND,
@@ -16,6 +16,9 @@ import {
   CAMERA_SNAP_SPEED,
   AVATAR_MOVING_THRESHOLD,
   SCROLL_COOLDOWN,
+  AVATAR_WIDTH,
+  AVATAR_HEIGHT,
+  SPAWN_FINDER_TRIES_RATIO,
 } from './game/constants.ts';
 import {
   clearCanvas,
@@ -34,6 +37,7 @@ import {
 } from './game/draw.ts';
 import { GameState } from './game/state.ts';
 import { InputState, setupInputs } from './game/inputs.ts';
+import { AABB } from './game/types.ts';
 
 export const LOBBY_CONTAINER = document.querySelector("#lobby-container")!;
 export const START_BUTTON: HTMLButtonElement | null = document.querySelector("#create-button")!;
@@ -55,14 +59,14 @@ function exitButtonOnClick(_: PointerEvent) {
   show(LOBBY_CONTAINER);
 }
 
-function startButtonOnClick(_: PointerEvent) {
+async function startButtonOnClick(_: PointerEvent) {
   STOP_GAME = false;
   hide(LOBBY_CONTAINER);
   show(GAME_CONTAINER);
 
   setupCanvas(CANVAS, GAME_CONTAINER);
   setupInputs(INPUTS, GAMESTATE, CANVAS);
-  setupGame(GAMESTATE, CANVAS, "testmap1.png");
+  await setupGame(GAMESTATE, CANVAS, "testmap1.png");
   setupPlayers(GAMESTATE, ["Player 1", "Player 2", "Player 3"], 3)
   GAMESTATE.starting = true;
   window.requestAnimationFrame(tick);
@@ -85,52 +89,99 @@ function setupCanvas(canvas: HTMLCanvasElement, wrapper: Element) {
   wrapper.appendChild(canvas);
 }
 
-function setupGame(gameState: GameState, canvas: HTMLCanvasElement, map: string) {
-  gameState.terrain.image.src = `/maps/${map}`;
-  gameState.terrain.image.onload = () => {
-    const w = gameState.terrain.image.naturalWidth;
-    const h = gameState.terrain.image.naturalHeight;
+function loadImage(img: HTMLImageElement, src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      img.onload = null;
+      img.onerror = null;
+    };
 
-    const viewW = canvas.width / gameState.camera.zoom;
-    const viewH = canvas.height / gameState.camera.zoom;
+    img.onload = () => {
+      cleanup();
+      resolve();
+    };
 
-    gameState.camera.x = w / 2 - viewW / 2;
-    gameState.camera.y = h / 2 - viewH / 2;
+    img.onerror = () => {
+      cleanup();
+      reject(new Error(`Failed to load image: ${src}`));
+    };
 
-    const offscreenCanvas = new OffscreenCanvas(w, h);
-    const offCtx = offscreenCanvas.getContext("2d");
-    if (!offCtx) throw new Error("No 2d context on offscreenCanvas");
+    img.src = src;
 
-    offCtx.drawImage(gameState.terrain.image, 0, 0);
-    const imgData = offCtx.getImageData(0, 0, w, h);
-    const data = imgData.data;
-    const solidBitmap = new Uint8Array(w * h);
-
-    for (let p = 0; p < w * h; p++) {
-      const pixelIndex = p * 4;
-      const brightness = data[pixelIndex + 3];
-      solidBitmap[p] = brightness > SOLID_ALPHA_THRESHOLD ? 1 : 0;
+    if (img.complete && img.naturalWidth > 0) {
+      cleanup();
+      resolve();
     }
+  });
+}
 
-    gameState.terrain.loaded = true;
-    gameState.terrain.bitmap = solidBitmap;
-    gameState.terrain.imageData = imgData;
-    gameState.terrain.canvas = offscreenCanvas;
-    gameState.terrain.ctx = offCtx;
+async function setupGame(gameState: GameState, canvas: HTMLCanvasElement, map: string) {
+  const src = `/maps/${map}`;
+  await loadImage(gameState.terrain.image, src);
+
+  const w = gameState.terrain.image.naturalWidth;
+  const h = gameState.terrain.image.naturalHeight;
+
+  const viewW = canvas.width / gameState.camera.zoom;
+  const viewH = canvas.height / gameState.camera.zoom;
+
+  gameState.camera.x = w / 2 - viewW / 2;
+  gameState.camera.y = h / 2 - viewH / 2;
+
+  const offscreenCanvas = new OffscreenCanvas(w, h);
+  const offCtx = offscreenCanvas.getContext("2d");
+  if (!offCtx) throw new Error("No 2d context on offscreenCanvas");
+
+  offCtx.drawImage(gameState.terrain.image, 0, 0);
+  const imgData = offCtx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+  const solidBitmap = new Uint8Array(w * h);
+
+  for (let p = 0; p < w * h; p++) {
+    const pixelIndex = p * 4;
+    const brightness = data[pixelIndex + 3];
+    solidBitmap[p] = brightness > SOLID_ALPHA_THRESHOLD ? 1 : 0;
   }
+
+  gameState.terrain.loaded = true;
+  gameState.terrain.bitmap = solidBitmap;
+  gameState.terrain.imageData = imgData;
+  gameState.terrain.canvas = offscreenCanvas;
+  gameState.terrain.ctx = offCtx;
+
 }
 
 function setupPlayers(gameState: GameState, players: string[], avatarsPerPlayer: number) {
-  const spawns = findEvenSpawns(gameState, players.length, avatarsPerPlayer);
+  const spawns = findRandomSpawns(gameState, players.length, avatarsPerPlayer);
   // Find enough avatar spawn locations
   // Create players with random colors and passed in names.
-  gameState.players.push(new Player("Jeff", "purple", [new Vec2(50, 30)]));
-  gameState.players.push(new Player("Anthony", "green", [new Vec2(80, 50)]));
-  gameState.players.push(new Player("Pete", "blue", [new Vec2(100, 50)]));
+  if (spawns.length < players.length || spawns.length === 0 || spawns[0].length < avatarsPerPlayer) {
+    console.error("Not enough spawns were found.");
+  }
+
+  const possibleColors = ["red", "blue", "green", "purple", "brown", "orange"];
+
+  for (let i = 0; i < players.length; i++) {
+    if (i > possibleColors.length - 1) {
+      console.log("Exhausted possible colors for players.");
+    }
+    gameState.players.push(new Player(players[i], possibleColors[mod(i, possibleColors.length)], spawns[i]));
+  }
 }
 
-function findEvenSpawns(gameState: GameState, numberOfPlayers: number, avatarsPerPlayer: number): Vec2[][] {
-  return [[new Vec2(0, 0)]];
+function findRandomSpawns(gameState: GameState, numberOfPlayers: number, avatarsPerPlayer: number): Vec2[][] {
+  const foundSpawns: Vec2[] = [];
+  const needed: number = avatarsPerPlayer * numberOfPlayers;
+  let tries = needed * SPAWN_FINDER_TRIES_RATIO;
+  while (foundSpawns.length < needed && tries > 0) {
+    const possibleSpawnX = Math.random() * (gameState.terrain.image.naturalWidth - 10);
+    const possibleSpawnY = Math.random() * (gameState.terrain.image.naturalHeight - 15);
+    if (!overlapsTerrain(gameState.terrain, new AABB(possibleSpawnX, possibleSpawnY, AVATAR_WIDTH, AVATAR_HEIGHT))) {
+      foundSpawns.push(new Vec2(possibleSpawnX, possibleSpawnY));
+    }
+    tries--;
+  }
+  return chunk(foundSpawns, avatarsPerPlayer);
 }
 
 function spawnGravestonesForDeadAvatars() {

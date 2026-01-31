@@ -1,4 +1,5 @@
 import { Avatar } from "./classes";
+import { AVATAR_HEIGHT, AVATAR_WIDTH } from "./constants";
 import type { Vec2 } from "./vec2";
 
 export class Player {
@@ -22,8 +23,8 @@ export class Player {
         100,
         `${randomName}`,
         avatars[i],
-        10,
-        15,
+        AVATAR_WIDTH,
+        AVATAR_HEIGHT,
         50
       )
       this.allAvatars.push(newAvatar);
