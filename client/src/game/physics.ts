@@ -1,4 +1,4 @@
-import type { AABB, MovementResult } from "./types"
+import type { AABB, MovementResult as CollisionResult } from "./types"
 import { Avatar, Entity } from "./classes";
 
 import {
@@ -103,12 +103,13 @@ export function isWallCollision(terrain: Terrain, avatar: Avatar, dx: number): b
   return false; // Only blocked at feet = slope
 }
 
-export function checkCollisions(terrain: Terrain, entity: Entity, movement: Vec2, stepHeight: number = 0, collisionGroup: AABB[]): MovementResult {
-  if (!terrain.loaded) return { movement, stepUp: 0, collision: false, hitGround: false, hitWall: false, hitRoof: false };
-
-  const baseX = entity.worldPosFloat.x;
-  const baseY = entity.worldPosFloat.y;
-
+export function checkCollisions(
+  terrain: Terrain,
+  entity: Entity,
+  movement: Vec2,
+  collisionGroup: AABB[],
+  maxStepHeight: number
+): CollisionResult {
   const overlapsAt = (x: number, y: number) => {
     const hb: AABB = {
       x,
@@ -119,85 +120,77 @@ export function checkCollisions(terrain: Terrain, entity: Entity, movement: Vec2
     return overlapsTerrain(terrain, hb) || overlapsAny(hb, collisionGroup);
   };
 
-  // Resolve x and y in order.
-  let dx = movement.x;
-  let dy = movement.y;
-  let stepUp = 0;
+  const baseX = entity.worldPosFloat.x;
+  const baseY = entity.worldPosFloat.y;
 
-  // Find biggest x movement in the direction that doesnt cause player to overlap terrain through binary search
-  if (dx !== 0) {
-    const targetX = baseX + dx;
+  const stepMagnitude = 2;
+  let dx = 0;
+  let dy = 0;
+  let totalRampUp = 0;
+  let hitWall = false;
+  let hitVertical = false;
 
-    if (overlapsAt(baseX + dx, baseY)) {
-      let found = false;
-      // Can we step over this boundary?
-      if (stepHeight > 0) {
-        for (let step = 1; step <= stepHeight; step++) {
-          if (!overlapsAt(targetX, baseY - step)) {
-            stepUp = step;
-            found = true;
-            break
+  if (movement.x !== 0) {
+    const stepsX = Math.max(1, Math.ceil(Math.abs(movement.x) / stepMagnitude));
+
+    for (let i = 1; i <= stepsX; i++) {
+      const t = i / stepsX;
+      const nextDx = movement.x * t;
+
+      if (overlapsAt(baseX + nextDx, baseY - totalRampUp)) {
+        let stepUpFound = false;
+        if (maxStepHeight > 0) {
+          for (let rampStep = 1; rampStep <= maxStepHeight; rampStep++) {
+            if (!overlapsAt(baseX + nextDx, baseY - totalRampUp - rampStep)) {
+              totalRampUp += rampStep;
+              dx = nextDx;
+              stepUpFound = true;
+              break;
+            }
           }
         }
-      }
 
-      if (!found) {
-        const dir = Math.sign(dx);// Normalized dir -1 or 1
-        const max = Math.abs(dx);
-        let lo = 0;
-        let hi = max;
-        const eps = 0.5; // pixel-ish precision
-
-        while (hi - lo > eps) {
-          const mid = (lo + hi) / 2;
-          if (overlapsAt(baseX + dir * mid, baseY)) {
-            hi = mid;
-          } else {
-            lo = mid;
-          }
+        if (!stepUpFound) {
+          hitWall = true;
+          break;
         }
-        dx = dir * lo;
+      } else {
+        dx = nextDx;
       }
     }
   }
 
-  const afterX = { x: baseX + dx, y: baseY - stepUp };
-  let clampedY = false;
+  const afterStepY = movement.y - totalRampUp;
 
-  dy = dy - stepUp;
+  if (afterStepY !== 0) {
+    const stepsY = Math.max(1, Math.ceil(Math.abs(afterStepY) / stepMagnitude));
 
-  // Same in y axis
-  if (dy !== 0) {
-    const dir = Math.sign(dy);
-    const max = Math.abs(dy);
+    for (let i = 1; i <= stepsY; i++) {
+      const t = i / stepsY;
+      const nextDy = afterStepY * t;
 
-    // Only need to update if it overlaps.
-    if (overlapsAt(afterX.x + 0, afterX.y + dy)) {
-      clampedY = true;
-      let lo = 0;
-      let hi = max;
-      const eps = 0.5;
-
-      while (hi - lo > eps) {
-        const mid = (lo + hi) / 2;
-        if (overlapsAt(afterX.x, afterX.y + dir * mid)) {
-          hi = mid;
-        } else {
-          lo = mid;
-        }
+      if (overlapsAt(baseX + dx, baseY - totalRampUp + nextDy)) {
+        hitVertical = true;
+        break;
+      } else {
+        dy = nextDy;
       }
-
-      dy = dir * lo;
     }
   }
 
-  const hitGround = clampedY && movement.y > 0;
-  const hitRoof = clampedY && movement.y < 0;
+  const finalDy = dy - totalRampUp;
 
-  const hitWall = (movement.x != dx)
-  const collision = hitWall || clampedY;
+  const hitGround = hitVertical && movement.y > 0;
+  const hitRoof = hitVertical && movement.y < 0;
 
-  return { movement: new Vec2(dx, dy), stepUp: stepUp, collision: collision, hitGround: hitGround, hitWall: hitWall, hitRoof: hitRoof };
+  return {
+    movement: new Vec2(dx, finalDy),
+    stepUp: totalRampUp,
+    collision: hitWall || hitVertical,
+    hitGround,
+    hitRoof,
+    hitWall,
+  };
 }
 
 function calculateInputX(inputs: InputState) {

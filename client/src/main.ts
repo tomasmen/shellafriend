@@ -55,14 +55,14 @@ export const GAMESTATE: GameState = new GameState();
 function exitButtonOnClick(_: PointerEvent) {
   STOP_GAME = true;
   GAMESTATE.reset();
-  hide(GAME_CONTAINER);
-  show(LOBBY_CONTAINER);
+  hideEl(GAME_CONTAINER);
+  showEl(LOBBY_CONTAINER);
 }
 
 async function startButtonOnClick(_: PointerEvent) {
   STOP_GAME = false;
-  hide(LOBBY_CONTAINER);
-  show(GAME_CONTAINER);
+  hideEl(LOBBY_CONTAINER);
+  showEl(GAME_CONTAINER);
 
   setupCanvas(CANVAS, GAME_CONTAINER);
   setupInputs(INPUTS, GAMESTATE, CANVAS);
@@ -72,10 +72,11 @@ async function startButtonOnClick(_: PointerEvent) {
   window.requestAnimationFrame(tick);
 }
 
-function hide(element: Element) {
+function hideEl(element: Element) {
   element.classList.add("hidden");
 }
-function show(element: Element) {
+
+function showEl(element: Element) {
   element.classList.remove("hidden");
 }
 
@@ -204,7 +205,7 @@ function updateGravestones(deltaTime: number) {
       grave.velocity.y * deltaTime
     );
 
-    const result = checkCollisions(GAMESTATE.terrain, grave, intended, 0, []);
+    const result = checkCollisions(GAMESTATE.terrain, grave, intended, [], 0);
 
     if (result.hitGround) {
       grave.grounded = true;
@@ -315,7 +316,7 @@ function updateAllAliveAvatars(gameState: GameState, deltaTime: number) {
     );
 
     const allHitboxesExceptSelf = GAMESTATE.players.flatMap(p => p.aliveAvatars.filter(a => a !== avatar)).map(a => a.hitbox);
-    const { movement: moved, stepUp, hitGround, hitWall, hitRoof } = checkCollisions(GAMESTATE.terrain, avatar, intended, avatar.grounded ? MAX_STEP_HEIGHT : 0, allHitboxesExceptSelf);
+    const { movement: moved, stepUp, hitGround, hitWall, hitRoof } = checkCollisions(GAMESTATE.terrain, avatar, intended, allHitboxesExceptSelf, avatar.grounded ? MAX_STEP_HEIGHT : 0);
 
     applySlopeSlow(avatar, moved, stepUp)
 
@@ -362,7 +363,7 @@ function updateProjectiles(gameState: GameState, deltaTime: number) {
       projectile.velocity.y * deltaTime,
     );
 
-    const movementResult = checkCollisions(GAMESTATE.terrain, projectile, intended, 0, collisionGroup);
+    const movementResult = checkCollisions(GAMESTATE.terrain, projectile, intended, collisionGroup, 0);
 
     projectile.move(movementResult.movement.x, movementResult.movement.y);
 
@@ -406,9 +407,9 @@ function update(timeMS: number, dt: number, inputs: InputState, gameState: GameS
 
   handleWeaponScroll(gameState, inputs);
   gameState.hitmarkCache.deleteExpired(gameState);
+  updateProjectiles(gameState, dt);
   updateAllAliveAvatars(gameState, dt);
   removeDeadProjectiles();
-  updateProjectiles(gameState, dt);
   spawnGravestonesForDeadAvatars();
   updateGravestones(dt);
 
