@@ -1,6 +1,4 @@
-import type { AABB, MovementResult as CollisionResult } from "./types"
-import { Avatar, Entity } from "./classes";
-
+import { Avatar, Entity } from "./entities.ts";
 import {
   MOVE_ACCEL,
   AIR_ACCEL,
@@ -17,6 +15,29 @@ import type { Terrain } from "./terrain.ts";
 import { Vec2 } from "./vec2.ts";
 import type { InputState } from "./inputs.ts";
 import type { Player } from "./player.ts";
+
+export type CollisionResult = {
+  movement: Vec2;
+  stepUp: number;
+  collision: boolean;
+  collisionPoint: Vec2;
+  hitGround: boolean;
+  hitWall: boolean;
+  hitRoof: boolean;
+}
+
+export class AABB {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  constructor(x: number, y: number, width: number, height: number) {
+    this.x = x;
+    this.y = y;
+    this.width = width;
+    this.height = height;
+  }
+}
 
 export function isSolidPixel(terrain: Terrain, x: number, y: number): boolean {
   if (!terrain.loaded || !terrain.bitmap) return false;
@@ -126,6 +147,7 @@ export function checkCollisions(
   const stepMagnitude = 2;
   let dx = 0;
   let dy = 0;
+  let collisionPoint = new Vec2(baseX, baseY);
   let totalRampUp = 0;
   let hitWall = false;
   let hitVertical = false;
@@ -152,6 +174,7 @@ export function checkCollisions(
 
         if (!stepUpFound) {
           hitWall = true;
+          collisionPoint.x = baseX + nextDx;
           break;
         }
       } else {
@@ -171,6 +194,7 @@ export function checkCollisions(
 
       if (overlapsAt(baseX + dx, baseY - totalRampUp + nextDy)) {
         hitVertical = true;
+        collisionPoint.y = baseY + nextDy;
         break;
       } else {
         dy = nextDy;
@@ -179,12 +203,12 @@ export function checkCollisions(
   }
 
   const finalDy = dy - totalRampUp;
-
   const hitGround = hitVertical && movement.y > 0;
   const hitRoof = hitVertical && movement.y < 0;
 
   return {
     movement: new Vec2(dx, finalDy),
+    collisionPoint: collisionPoint,
     stepUp: totalRampUp,
     collision: hitWall || hitVertical,
     hitGround,

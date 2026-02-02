@@ -1,4 +1,4 @@
-import { Avatar } from "./classes";
+import { Avatar } from "./entities";
 import { AVATAR_HEIGHT, AVATAR_WIDTH } from "./constants";
 import type { Vec2 } from "./vec2";
 

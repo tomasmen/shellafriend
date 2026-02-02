@@ -1,12 +1,11 @@
 import { zzfx } from "zzfx";
-import type { AABB } from "./types";
-import { GRAVITY, JUMP_COOLDOWN_MS, SHOW_DAMAGE_TIME_MS } from "./constants";
-import { distanceToRect } from "../utils";
-import type { Player } from "./player";
-import { Vec2 } from "./vec2";
-import type { HitmarkCache } from "./hitmarks";
-import type { Terrain } from "./terrain";
-import type { InputState } from "./inputs";
+import { GRAVITY, JUMP_COOLDOWN_MS, SHOW_DAMAGE_TIME_MS } from "./constants.ts";
+import { distanceToRect } from "../utils.ts";
+import type { Player } from "./player.ts";
+import { Vec2 } from "./vec2.ts";
+import type { InputState } from "./inputs.ts";
+import type { GameState } from "./state.ts";
+import type { CollisionResult, AABB } from "./physics.ts";
 
 export class Entity {
   worldPosFloat: Vec2;
@@ -133,7 +132,6 @@ export class Gravestone extends Entity {
   }
 }
 
-
 export class Projectile extends Entity {
   explosionRadius: number;
   explosionDamage: number;
@@ -142,6 +140,7 @@ export class Projectile extends Entity {
   gravityScale: number;
   dead: boolean;
   pushForce: number;
+  projectileType: "explosion" | "direct";
 
   constructor(
     pos: Vec2,
@@ -155,8 +154,10 @@ export class Projectile extends Entity {
     thrust: number = 0,
     pushForce: number,
     gravityScale: number = 1.0,
+    projectileType: "explosion" | "direct"
   ) {
     super(pos, width, height);
+    this.projectileType = projectileType;
     this.velocity = initialDirection.scale(initialSpeed).copy();
     this.maxSpeed = maxSpeed;
     this.explosionRadius = explosionRadius;
@@ -178,13 +179,14 @@ export class Projectile extends Entity {
     this.velocity.y += direction.y;
   }
 
-  hit(terrain: Terrain, timeMS: number, hitmarks: HitmarkCache, targets: Avatar[]) {
+  hit(gameState: GameState, movementResult: CollisionResult) {
+    const targets = gameState.players.flatMap(p => p.aliveAvatars);
     this.dead = true;
     const explosionCenter = new Vec2(
-      this.worldPosFloat.x + this.width / 2,
-      this.worldPosFloat.y + this.height / 2
+      movementResult.collisionPoint.x,
+      movementResult.collisionPoint.y
     );
-    terrain.destroyCircle(new Vec2(explosionCenter.x, explosionCenter.y), this.explosionRadius);
+    gameState.terrain.destroyCircle(new Vec2(explosionCenter.x, explosionCenter.y), this.explosionRadius);
     if (this.explosionRadius > 10) {
       zzfx(...[, 1, 83, .06, .28, .26, 5, .5, -7, -7, , , , 1.2, 6.8, .5, .33, .38, .18]); // EXPLOSION
     }
@@ -193,15 +195,15 @@ export class Projectile extends Entity {
       const distance = distanceToRect(explosionCenter, avatar.hitbox);
       if (distance <= this.explosionRadius) {
         const distanceFactor = 1 - (distance / this.explosionRadius);
-        const actualDamage = Math.round(this.explosionDamage * distanceFactor);
+        const actualDamage = this.projectileType === "explosion" ? Math.round(this.explosionDamage * distanceFactor) : this.explosionDamage;
         if (actualDamage > 0) {
-          avatar.inflictDamage(actualDamage, timeMS);
-          hitmarks.add({
+          avatar.inflictDamage(actualDamage, gameState.currentTimeMS);
+          gameState.hitmarkCache.add({
             position: new Vec2(avatar.worldPos.x, avatar.worldPos.y - 20),
             damageAmount: actualDamage,
             color: "red",
             lifetime: 2000,
-            spawnTime: timeMS,
+            spawnTime: gameState.currentTimeMS,
             targetEntity: avatar
           });
         };

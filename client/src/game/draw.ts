@@ -1,4 +1,4 @@
-import { Avatar } from "./classes";
+import { Avatar } from "./entities";
 import { SHOW_DAMAGE_TIME_MS } from "./constants";
 import type { Player } from "./player";
 import { Vec2 } from "./vec2";

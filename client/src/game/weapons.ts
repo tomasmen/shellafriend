@@ -1,4 +1,4 @@
-import { Projectile } from "./classes";
+import { Projectile } from "./entities";
 import type { WeaponId, WeaponDef } from "./types";
 import { zzfx } from "zzfx";
 import { Player } from "./player"
@@ -26,7 +26,8 @@ export const Weapons: Record<WeaponId, WeaponDef> = {
         20,
         300,
         150,
-        0.3
+        0.3,
+        "explosion"
       );
 
       projectiles.push(projectile);
@@ -65,10 +66,11 @@ export const Weapons: Record<WeaponId, WeaponDef> = {
           1000,
           1000,
           5,
-          3,
+          2,
           0,
-          10,
-          0.1
+          20,
+          0.1,
+          "direct"
         ));
       }
     }
@@ -91,11 +93,12 @@ export const Weapons: Record<WeaponId, WeaponDef> = {
         initialDir,
         2000,
         2000,
-        40,
-        1,
+        30,
+        0,
         0,
         200,
-        0.1
+        0.1,
+        "direct"
       );
 
       projectiles.push(projectile);

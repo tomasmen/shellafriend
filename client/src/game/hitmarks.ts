@@ -1,4 +1,4 @@
-import type { Entity } from "./classes";
+import type { Entity } from "./entities";
 import type { GameState } from "./state";
 import type { Vec2 } from "./vec2";
 

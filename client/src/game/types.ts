@@ -1,4 +1,4 @@
-import { type Projectile } from './classes.ts';
+import { type Projectile } from './entities.ts';
 import type { InputState } from './inputs.ts';
 import { Player } from "./player.ts";
 import { Vec2 } from './vec2.ts';
@@ -26,24 +26,3 @@ export type WeaponDef = {
   use(player: Player, projectiles: Projectile[], inputs: InputState): void;
 }
 
-export type MovementResult = {
-  movement: Vec2;
-  stepUp: number;
-  collision: boolean;
-  hitGround: boolean;
-  hitWall: boolean;
-  hitRoof: boolean;
-}
-
-export class AABB {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  constructor(x: number, y: number, width: number, height: number) {
-    this.x = x;
-    this.y = y;
-    this.width = width;
-    this.height = height;
-  }
-}

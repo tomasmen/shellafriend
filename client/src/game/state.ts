@@ -1,4 +1,4 @@
-import type { Gravestone, Projectile } from "./classes";
+import type { Gravestone, Projectile } from "./entities";
 import { Terrain } from "./terrain";
 import { HitmarkCache } from "./hitmarks";
 import type { Player } from "./player";

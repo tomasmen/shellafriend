@@ -1,5 +1,5 @@
 import '../index.css'
-import { Gravestone } from './game/classes.ts';
+import { Gravestone } from './game/entities.ts';
 import { Player } from './game/player.ts';
 import { Vec2 } from './game/vec2.ts';
 import { applyAvatarInput, applyGroundFriction, applySlopeSlow, checkCollisions, isWallCollision, overlapsTerrain } from "./game/physics.ts";
@@ -37,7 +37,7 @@ import {
 } from './game/draw.ts';
 import { GameState } from './game/state.ts';
 import { InputState, setupInputs } from './game/inputs.ts';
-import { AABB } from './game/types.ts';
+import { AABB } from './game/physics.ts';
 
 export const LOBBY_CONTAINER = document.querySelector("#lobby-container")!;
 export const START_BUTTON: HTMLButtonElement | null = document.querySelector("#create-button")!;
@@ -367,9 +367,8 @@ function updateProjectiles(gameState: GameState, deltaTime: number) {
 
     projectile.move(movementResult.movement.x, movementResult.movement.y);
 
-    const targets = GAMESTATE.players.flatMap(p => p.aliveAvatars);
     if (movementResult.collision) {
-      projectile.hit(GAMESTATE.terrain, gameState.currentTimeMS, GAMESTATE.hitmarkCache, targets);
+      projectile.hit(gameState, movementResult);
     }
   }
 }
