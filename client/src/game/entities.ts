@@ -5,7 +5,7 @@ import type { Player } from "./player.ts";
 import { Vec2 } from "./vec2.ts";
 import type { InputState } from "./inputs.ts";
 import type { GameState } from "./state.ts";
-import type { CollisionResult, AABB } from "./physics.ts";
+import { type CollisionResult, type AABB, hitboxesOverlap } from "./physics.ts";
 
 export class Entity {
   worldPosFloat: Vec2;
@@ -183,17 +183,24 @@ export class Projectile extends Entity {
     const targets = gameState.players.flatMap(p => p.aliveAvatars);
     this.dead = true;
     const explosionCenter = new Vec2(
-      movementResult.collisionPoint.x,
-      movementResult.collisionPoint.y
+      movementResult.collisionPoint.x + this.width,
+      movementResult.collisionPoint.y + this.height
     );
     gameState.terrain.destroyCircle(new Vec2(explosionCenter.x, explosionCenter.y), this.explosionRadius);
     if (this.explosionRadius > 10) {
       zzfx(...[, 1, 83, .06, .28, .26, 5, .5, -7, -7, , , , 1.2, 6.8, .5, .33, .38, .18]); // EXPLOSION
     }
+    const projectileHitboxAtCollision: AABB = {
+      x: movementResult.collisionPoint.x,
+      y: movementResult.collisionPoint.y,
+      width: this.width,
+      height: this.height,
+    };
 
     for (let avatar of targets) {
+      const directHit = hitboxesOverlap(projectileHitboxAtCollision, avatar.hitbox);
       const distance = distanceToRect(explosionCenter, avatar.hitbox);
-      if (distance <= this.explosionRadius) {
+      if (distance <= this.explosionRadius || directHit) {
         const distanceFactor = 1 - (distance / this.explosionRadius);
         const actualDamage = this.projectileType === "explosion" ? Math.round(this.explosionDamage * distanceFactor) : this.explosionDamage;
         if (actualDamage > 0) {

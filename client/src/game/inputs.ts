@@ -123,7 +123,6 @@ export function setupInputs(inputs: InputState, gameState: GameState, canvas: El
 
     if (e.button === 2) {
       inputs.rightclickdown = new Vec2(e.clientX, e.clientY);
-      console.log("Right click down.")
     }
   }
 

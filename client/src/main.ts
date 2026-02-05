@@ -2,7 +2,7 @@ import '../index.css'
 import { Gravestone } from './game/entities.ts';
 import { Player } from './game/player.ts';
 import { Vec2 } from './game/vec2.ts';
-import { applyAvatarInput, applyGroundFriction, applySlopeSlow, checkCollisions, isWallCollision, overlapsTerrain } from "./game/physics.ts";
+import { applyAvatarInput, applyGroundFriction, applySlopeSlow, checkCollisions, hitboxesOverlap, isWallCollision, overlapsTerrain } from "./game/physics.ts";
 import { Weapons } from './game/weapons.ts';
 import { chunk, clampAbs, mod } from "./utils.ts";
 import {
@@ -64,10 +64,11 @@ async function startButtonOnClick(_: PointerEvent) {
   hideEl(LOBBY_CONTAINER);
   showEl(GAME_CONTAINER);
 
+  GAMESTATE.reset();
   setupCanvas(CANVAS, GAME_CONTAINER);
   setupInputs(INPUTS, GAMESTATE, CANVAS);
   await setupGame(GAMESTATE, CANVAS, "testmap1.png");
-  setupPlayers(GAMESTATE, ["Player 1", "Player 2", "Player 3"], 3)
+  setupPlayers(GAMESTATE, ["Player 1", "Player 2", "Player 3", "Player 4"], 6)
   GAMESTATE.starting = true;
   window.requestAnimationFrame(tick);
 }
@@ -154,8 +155,6 @@ async function setupGame(gameState: GameState, canvas: HTMLCanvasElement, map: s
 
 function setupPlayers(gameState: GameState, players: string[], avatarsPerPlayer: number) {
   const spawns = findRandomSpawns(gameState, players.length, avatarsPerPlayer);
-  // Find enough avatar spawn locations
-  // Create players with random colors and passed in names.
   if (spawns.length < players.length || spawns.length === 0 || spawns[0].length < avatarsPerPlayer) {
     console.error("Not enough spawns were found.");
   }
@@ -176,13 +175,39 @@ function findRandomSpawns(gameState: GameState, numberOfPlayers: number, avatars
   let tries = needed * SPAWN_FINDER_TRIES_RATIO;
   while (foundSpawns.length < needed && tries > 0) {
     const possibleSpawnX = Math.random() * (gameState.terrain.image.naturalWidth - 10);
-    const possibleSpawnY = Math.random() * (gameState.terrain.image.naturalHeight - 15);
-    if (!overlapsTerrain(gameState.terrain, new AABB(possibleSpawnX, possibleSpawnY, AVATAR_WIDTH, AVATAR_HEIGHT))) {
-      foundSpawns.push(new Vec2(possibleSpawnX, possibleSpawnY));
+    const possibleSpawnY = Math.random() * (gameState.terrain.image.naturalHeight - gameState.terrain.waterLevel - 15);
+    const possiblePos: Vec2 | null = tryGroundAvatarPosition(gameState, new Vec2(possibleSpawnX, possibleSpawnY));
+    if (possiblePos === null) continue;
+    if (avatarPosOverlapsAny(possiblePos, foundSpawns)) continue;
+    if (!overlapsTerrain(gameState.terrain, new AABB(possiblePos.x, possiblePos.y, AVATAR_WIDTH, AVATAR_HEIGHT))) {
+      foundSpawns.push(possiblePos);
     }
     tries--;
   }
   return chunk(foundSpawns, avatarsPerPlayer);
+}
+
+function avatarPosOverlapsAny(pos: Vec2, others: Vec2[]): boolean {
+  const a = new AABB(pos.x, pos.y, AVATAR_WIDTH, AVATAR_HEIGHT);
+  const b = new AABB(0, 0, AVATAR_WIDTH, AVATAR_HEIGHT);
+  for (let other of others) {
+    b.x = other.x;
+    b.y = other.y;
+    if (hitboxesOverlap(a, b)) return true;
+  }
+  return false;
+}
+
+function tryGroundAvatarPosition(gameState: GameState, position: Vec2): Vec2 | null {
+  while (!overlapsTerrain(gameState.terrain, new AABB(position.x, position.y + 1, AVATAR_WIDTH, AVATAR_HEIGHT))) {
+    position.y += 1;
+  }
+
+  if (position.y + AVATAR_HEIGHT >= gameState.terrain.image.naturalHeight - gameState.terrain.waterLevel) {
+    return null;
+  }
+
+  return position;
 }
 
 function spawnGravestonesForDeadAvatars() {

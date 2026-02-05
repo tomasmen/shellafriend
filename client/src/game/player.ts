@@ -55,7 +55,42 @@ export class Player {
   }
 }
 
-export const avatarNames: string[] = [
+export function resetAvatarNames() {
+  avatarNames = [
+    'atlas',
+    'becker',
+    'cairo',
+    'dax',
+    'echo',
+    'finn',
+    'gale',
+    'hugo',
+    'ion',
+    'jace',
+    'kai',
+    'luna',
+    'milo',
+    'nova',
+    'otto',
+    'piper',
+    'quinn',
+    'river',
+    'sage',
+    'tate',
+    'umi',
+    'vance',
+    'wren',
+    'xander',
+    'yosef',
+    'zeke',
+    'alma',
+    'bruno',
+    'cora',
+    'dante',
+  ];
+}
+
+export let avatarNames: string[] = [
   'atlas',
   'becker',
   'cairo',

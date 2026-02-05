@@ -1,7 +1,7 @@
 import type { Gravestone, Projectile } from "./entities";
 import { Terrain } from "./terrain";
 import { HitmarkCache } from "./hitmarks";
-import type { Player } from "./player";
+import { resetAvatarNames, type Player } from "./player";
 import type { Camera } from "./types";
 import { mod } from "../utils";
 import { ROUND_PHASE_DURATIONS_MS } from "./constants";
@@ -42,6 +42,8 @@ export class GameState {
   }
 
   reset() {
+    resetAvatarNames();
+    this.roundPhase = "action";
     this.starting = false;
     this.phaseStartTime = this.currentTimeMS;
     this.camera = { x: 0, y: 0, zoom: 2.5 }
@@ -75,6 +77,7 @@ export class GameState {
   }
 
   get isSimulationOver() {
+    // TODO: Check if avatars have stopped moving
     return this.roundPhase === "simulation" && this.projectiles.length <= 0;
   }
 
