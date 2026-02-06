@@ -68,7 +68,7 @@ async function startButtonOnClick(_: PointerEvent) {
   setupCanvas(CANVAS, GAME_CONTAINER);
   setupInputs(INPUTS, GAMESTATE, CANVAS);
   await setupGame(GAMESTATE, CANVAS, "testmap1.png");
-  setupPlayers(GAMESTATE, ["Player 1", "Player 2", "Player 3", "Player 4"], 6)
+  setupPlayers(GAMESTATE, ["Player 1", "Player 2"], 1)
   GAMESTATE.starting = true;
   window.requestAnimationFrame(tick);
 }
@@ -428,6 +428,11 @@ function update(timeMS: number, dt: number, inputs: InputState, gameState: GameS
 
   // Clamp to avoid huge change when changing tabs
   dt = Math.min(dt, 1 / 30);
+
+  if (gameState.roundPhase === "action" && gameState.activePlayer.activeAvatar.isDead) {
+    gameState.nextPhase();
+    gameState.nextPhase();
+  }
 
   handleWeaponScroll(gameState, inputs);
   gameState.hitmarkCache.deleteExpired(gameState);
